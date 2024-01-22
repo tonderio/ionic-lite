@@ -1,4 +1,4 @@
-export const cardTemplate = `
+export const cardTemplate: string = `
 <div class="container-tonder">
   <div id="collectCardholderName" class="empty-div"></div>
   <div id="collectCardNumber" class="empty-div"></div>

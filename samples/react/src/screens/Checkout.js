@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { InlineCheckout } from 'tonder-sdk-test'
 
 import sdkIcons from "../assets/img/sdk-icons.png";
@@ -6,10 +6,11 @@ import sdkIcons from "../assets/img/sdk-icons.png";
 export const Checkout = () => {
   const [selectedOption, setSelectedOption] = useState(null);
   const [optionHidden, setOptionHidden] = useState(true);
+  const ref = useRef(false);
   
-  useEffect(()=>{
+  useEffect(() => {
     const form = document.querySelector("#payment-form");
-    const apiKey = "d34a419991e0bd53ed5cae7faf979b3263afabf5";
+    const apiKey = "00d17d61e9240c6e0611fbdb1558e636ed6389db";
     const totalElement = document.querySelector("#cart-total");
     const returnUrl = window.location.href
     const inlineCheckout = new InlineCheckout({
@@ -18,9 +19,14 @@ export const Checkout = () => {
       totalElementId: totalElement,
       returnUrl: returnUrl
     });
-    inlineCheckout.injectCheckout();
-    return () => inlineCheckout.removeCheckout()
-  }, [])
+    if (ref.current) {
+      inlineCheckout.injectCheckout();
+    }
+    return () => {
+      ref.current = true;
+      inlineCheckout.removeCheckout()
+    };
+  }, []);
 
   const checkoutStyle = {
     marginTop: "2rem",

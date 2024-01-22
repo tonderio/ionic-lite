@@ -1,6 +1,18 @@
 import { AES } from "crypto-js";
 
 export class Checkout {
+
+  url: string
+  apiKey: string
+  type: string
+  backgroundColor: string
+  color: string
+  params: string
+  order: any
+  buttonText: string
+  cb: (params: any) => void
+  tonderButton: any
+
   constructor({
     apiKey,
     type = "payment",
@@ -21,7 +33,7 @@ export class Checkout {
 
     window.addEventListener("message", this.receiveMessage.bind(this), false);
   }
-  generateButton = (buttonText) => {
+  generateButton = (buttonText: string) => {
     this.buttonText = buttonText ? buttonText : this.buttonText
     this.tonderButton = document.createElement('button');
     this.tonderButton.innerHTML = this.buttonText;
@@ -34,10 +46,12 @@ export class Checkout {
   }
   mountButton = ({buttonText}) => {
     this.generateButton(buttonText)
-    const entryPoint = document.getElementById("tonder-checkout")
+    const entryPoint: HTMLElement | null = document.getElementById("tonder-checkout")
     try {
-      entryPoint.innerHTML = ""
-      entryPoint.append(this.tonderButton)
+      if(entryPoint) {
+        entryPoint.innerHTML = ""
+        entryPoint.append(this.tonderButton)
+      }
     } catch(error) {
       console.error(error)
     }
@@ -55,7 +69,7 @@ export class Checkout {
     element.style.boxShadow = '0 3px 6px 0 rgba(0,0,0,0.16)'
   }
   setOrder = ({products, email, shippingCost }) => {
-    let _order = {}
+    let _order: any = {}
     if (products) _order.products = products 
     if (email) _order.email = email 
     if (shippingCost) _order.shippingCost = shippingCost

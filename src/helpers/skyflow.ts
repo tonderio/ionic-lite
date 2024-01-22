@@ -1,4 +1,5 @@
 import { defaultStyles } from "./styles";
+import Skyflow from 'skyflow-js'
 
 export async function initSkyflow(
   vaultId,
@@ -40,7 +41,7 @@ export async function initSkyflow(
   );
 
   // Custom styles for collect elements.
-  var collectStylesOptions = Object.keys(customStyles).length === 0 ? defaultStyles : customStyles
+  var collectStylesOptions: any = Object.keys(customStyles).length === 0 ? defaultStyles : customStyles
 
   const stylesForCardNumber = { ...collectStylesOptions.inputStyles.base };
   stylesForCardNumber.textIndent = '44px';

@@ -42,12 +42,13 @@ export function toCurrency(value) {
 }
 
 export function showError(message) {
-  var msgErrorDiv = document.getElementById("msgError");
+  var msgErrorDiv: any = document.getElementById("msgError");
   msgErrorDiv.classList.add("error-container");
   msgErrorDiv.innerHTML = message;
   setTimeout(function () {
     try {
-      document.querySelector("#tonderPayButton").disabled = false;
+      const selector: any = document.querySelector("#tonderPayButton")
+      selector.disabled = false;
     } catch (error) {}
     msgErrorDiv.classList.remove("error-container");
     msgErrorDiv.innerHTML = "";

@@ -1,10 +1,23 @@
+type ThreeDSHandlerContructor = {
+  payload?: any,
+  apiKey?: string,
+  baseUrl?: string,
+  successUrl?: Location | string
+}
+
 export class ThreeDSHandler {
+
+  baseUrl?: string
+  apiKey?: string
+  payload?: any
+  successUrl?: Location | string
+
   constructor({
     payload = null,
     apiKey,
     baseUrl,
     successUrl
-  }) {
+  }: ThreeDSHandlerContructor) {
     this.baseUrl = baseUrl,
     this.apiKey = apiKey,
     this.payload = payload,
@@ -70,6 +83,7 @@ export class ThreeDSHandler {
 
         if (response.status === 200) {
           this.removeVerifyTransactionUrl();
+          //@ts-ignore
           window.location = this.successUrl
           console.log('La transacción se verificó con éxito.');
           return response;

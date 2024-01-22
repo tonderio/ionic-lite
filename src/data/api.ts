@@ -1,4 +1,5 @@
-export async function getOpenpayDeviceSessionID(merchant_id, public_key, signal) {
+export async function getOpenpayDeviceSessionID(merchant_id: string, public_key: string, signal: AbortSignal) {
+  //@ts-ignore
   let openpay = await window.OpenPay;
   openpay.setId(merchant_id);
   openpay.setApiKey(public_key);
@@ -7,7 +8,7 @@ export async function getOpenpayDeviceSessionID(merchant_id, public_key, signal)
   return response;
 }
 
-export async function getBusiness(baseUrlTonder, apiKeyTonder, signal) {
+export async function getBusiness(baseUrlTonder: string, apiKeyTonder: string, signal: AbortSignal) {
   const getBusiness = await fetch(
     `${baseUrlTonder}/api/v1/payments/business/${apiKeyTonder}`,
     {
@@ -21,7 +22,7 @@ export async function getBusiness(baseUrlTonder, apiKeyTonder, signal) {
   return response
 }
 
-export async function customerRegister(baseUrlTonder, apiKeyTonder, email, signal) {
+export async function customerRegister(baseUrlTonder: string, apiKeyTonder: string, email: string, signal: AbortSignal) {
   const url = `${baseUrlTonder}/api/v1/customer/`;
   const data = { email: email };
   const response = await fetch(url, {
@@ -42,7 +43,7 @@ export async function customerRegister(baseUrlTonder, apiKeyTonder, email, signa
   }
 }
 
-export async function createOrder(baseUrlTonder, apiKeyTonder, orderItems) {
+export async function createOrder(baseUrlTonder: string, apiKeyTonder: string, orderItems: any[]) {
   const url = `${baseUrlTonder}/api/v1/orders/`;
   const data = orderItems;
   const response = await fetch(url, {
@@ -61,7 +62,7 @@ export async function createOrder(baseUrlTonder, apiKeyTonder, orderItems) {
   }
 }
 
-export async function createPayment(baseUrlTonder, apiKeyTonder, paymentItems) {
+export async function createPayment(baseUrlTonder: string, apiKeyTonder: string, paymentItems: { business_pk: string }) {
   const url = `${baseUrlTonder}/api/v1/business/${paymentItems.business_pk}/payments/`;
   const data = paymentItems;
   const response = await fetch(url, {
@@ -80,7 +81,7 @@ export async function createPayment(baseUrlTonder, apiKeyTonder, paymentItems) {
   }
 }
 
-export async function startCheckoutRouter(baseUrlTonder, apiKeyTonder, routerItems) {
+export async function startCheckoutRouter(baseUrlTonder: string, apiKeyTonder: string, routerItems: any) {
   try {
     const url = `${baseUrlTonder}/api/v1/checkout-router/`;
     const data = routerItems;

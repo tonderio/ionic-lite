@@ -6,31 +6,60 @@ import {
   createPayment,
   startCheckoutRouter,
   getOpenpayDeviceSessionID
-} from '../data/api';
+} from '../data/api.js';
 import {
   showError
-} from '../helpers/utils';
-import { initSkyflow } from '../helpers/skyflow'
+} from '../helpers/utils.js';
+import { initSkyflow } from '../helpers/skyflow.js'
 import { ThreeDSHandler } from './3dsHandler.js';
+import { Customer, Business } from '../types/commons-ds.ts';
 
+export type InlineCheckoutConstructor = {
+  returnUrl: string,
+  apiKey: string,
+  successUrl: string,
+  renderPaymentButton: boolean,
+  callBack: (params: any) => void,
+  styles: any
+}
 
 export class InlineCheckout {
-  static injected = false;
+  static injected: boolean = false;
   customer = {}
   items = []
-  baseUrl = process.env.BASE_URL || "http://localhost:8000";
-  collectContainer = null
-  merchantData = {}
+  baseUrl = process.env.BASE_URL || "https://stage.tonder.io";
+  collectContainer: any = null
   cartTotal = null
+  apiKeyTonder?: string
+  returnUrl?: string
+  successUrl?: string
+  renderPaymentButton: boolean
+  callBack: (params) => void
+  customStyles: any
+  abortController: AbortController
+  process3ds: ThreeDSHandler
+  cb: () => void
+  firstName: string
+  lastName: string
+  country: string
+  address: string
+  city: string
+  state: string
+  postCode: string
+  email: string
+  phone: string
+  merchantData: Business
+  cartItems: any[]
+  injectInterval: any
 
-  constructor  ({
+  constructor ({
     apiKey,
     returnUrl,
     successUrl,
     renderPaymentButton = false,
     callBack = () => {},
     styles,
-  }) {
+  }: InlineCheckoutConstructor) {
     this.apiKeyTonder = apiKey;
     this.returnUrl = returnUrl;
     this.successUrl = successUrl;
@@ -47,7 +76,7 @@ export class InlineCheckout {
   #mountPayButton() {
     if (!this.renderPaymentButton) return;
 
-    const payButton = document.querySelector("#tonderPayButton");
+    const payButton: HTMLElement | null = document.querySelector("#tonderPayButton");
     if (!payButton) {
       console.error("Pay button not found");
       return;
@@ -80,7 +109,7 @@ export class InlineCheckout {
         this.#handleCustomer(data.customer)
         this.setCartTotal(data.cart?.total)
         this.setCartItems(data.cart?.items)
-        const response = await this.#checkout()
+        const response: string | null = await this.#checkout()
         if (response) {
           const process3ds = new ThreeDSHandler({ payload: response });
           this.callBack(response);
@@ -96,7 +125,7 @@ export class InlineCheckout {
     });
   }
 
-  #handleCustomer(customer) {
+  #handleCustomer(customer: Customer) {
     console.log('customer: ', customer)
     if (!customer) return
 
@@ -136,8 +165,9 @@ export class InlineCheckout {
     if (InlineCheckout.injected) return
     this.process3ds.verifyTransactionStatus()
     const injectInterval = setInterval(() => {
-      if (document.querySelector("#tonder-checkout")) {
-        document.querySelector("#tonder-checkout").innerHTML = cardTemplate;
+      const queryElement = document.querySelector("#tonder-checkout")
+      if (queryElement) {
+        queryElement.innerHTML = cardTemplate;
         this.#mountTonder();
         clearInterval(injectInterval);
         InlineCheckout.injected = true
@@ -188,16 +218,19 @@ export class InlineCheckout {
 
   async #checkout() {
     try {
-      document.querySelector("#tonderPayButton").disabled = true;
+      const selector: any = document.querySelector("#tonderPayButton");
+      if(selector){
+        selector.disabled = true;
+      }
     } catch (error) {
     }
 
     const { openpay_keys, reference, business } = this.merchantData
     const total = Number(this.cartTotal)
 
-    var cardTokensSkyflowTonder = null;
+    var cardTokensSkyflowTonder: any = null;
     try {
-      const collectResponseSkyflowTonder = await this.collectContainer.collect();
+      const collectResponseSkyflowTonder = await this.collectContainer?.collect();
       cardTokensSkyflowTonder = await collectResponseSkyflowTonder["records"][0]["fields"];
     } catch (error) {
       showError("Por favor, verifica todos los campos de tu tarjeta")
@@ -278,9 +311,14 @@ export class InlineCheckout {
         routerItems
       );
 
+      console.log("jsonResponseRouter", jsonResponseRouter);
+
       if (jsonResponseRouter) {
         try {
-          document.querySelector("#tonderPayButton").disabled = false;
+          const selector: any = document.querySelector("#tonderPayButton");
+          if(selector) {
+            selector.disabled = false;
+          }
         } catch {}
         return jsonResponseRouter;
       } else {
