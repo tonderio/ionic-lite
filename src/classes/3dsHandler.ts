@@ -56,8 +56,8 @@ export class ThreeDSHandler {
   // https://example.com/?name=John&age=30&city=NewYork
   // { name: "John", age: "30", city: "NewYork" }
   getURLParameters() {
-    const parameters = {};
-    const urlParams = new URLSearchParams(window.location.search);
+    const parameters: any = {};
+    const urlParams: any = new URLSearchParams(window.location.search);
 
     for (const [key, value] of urlParams) {
       parameters[key] = value;
@@ -89,6 +89,7 @@ export class ThreeDSHandler {
           return response;
         } else {
           console.error('La verificación de la transacción falló.');
+          return null;
         }
       } catch (error) {
         console.error('Error al verificar la transacción:', error);
@@ -96,6 +97,7 @@ export class ThreeDSHandler {
       }
     } else {
       console.log('No verify_transaction_status_url found');
+      return null;
     }
   }
 }

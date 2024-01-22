@@ -2,12 +2,12 @@ import { defaultStyles } from "./styles";
 import Skyflow from 'skyflow-js'
 
 export async function initSkyflow(
-  vaultId,
-  vaultUrl,
-  baseUrl,
-  apiKey,
-  signal,
-  customStyles = {}
+  vaultId: string,
+  vaultUrl: string,
+  baseUrl: string,
+  signal: AbortSignal,
+  customStyles: any = {},
+  apiKey?: string
 ) {
   const skyflow = await Skyflow.init({
     vaultID: vaultId,
@@ -126,11 +126,11 @@ export async function initSkyflow(
 }
 
 async function mountElements(
-  cardNumberElement,
-  cvvElement,
-  expiryMonthElement,
-  expiryYearElement,
-  cardHolderNameElement,
+  cardNumberElement: any,
+  cvvElement: any,
+  expiryMonthElement: any,
+  expiryYearElement: any,
+  cardHolderNameElement: any,
 ) {
   cardNumberElement.mount("#collectCardNumber");
   cvvElement.mount("#collectCvv");

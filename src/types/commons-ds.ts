@@ -22,3 +22,22 @@ export type Business = {
         pk: string
     } 
 }
+
+export type OrderItem = {
+    description: string,
+    quantity: number,
+    price_unit: number,
+    discount: number,
+    taxes: number,
+    product_reference: number,
+    name: string,
+    amount_total: number
+}
+
+export type PaymentData = {
+    customer: Customer,
+    cart: {
+        total: string | number,
+        items: OrderItem[]
+    }
+}

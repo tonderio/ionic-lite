@@ -1,9 +1,18 @@
 import { AES } from "crypto-js";
 
+type CheckoutType = {
+  apiKey?: string,
+  type: string,
+  backgroundColor: string,
+  color: string,
+  cb: (params?: any)=> void,
+  url: string,
+}
+
 export class Checkout {
 
   url: string
-  apiKey: string
+  apiKey?: string
   type: string
   backgroundColor: string
   color: string
@@ -20,7 +29,7 @@ export class Checkout {
     color="#EBEBEB",
     cb=()=>{},
     url="http://checkout.tonder.io/#/"
-  }) {
+  }: CheckoutType) {
     this.url = url
     this.apiKey = apiKey
     this.type = type
@@ -40,11 +49,11 @@ export class Checkout {
     this.stylishButton(this.tonderButton)
     this.tonderButton.onclick = this.openCheckout
   }
-  getButton = ({buttonText}) => {
+  getButton = ({ buttonText }: { buttonText: string }) => {
     this.generateButton(buttonText)
     return this.tonderButton
   }
-  mountButton = ({buttonText}) => {
+  mountButton = ({ buttonText }: { buttonText: string }) => {
     this.generateButton(buttonText)
     const entryPoint: HTMLElement | null = document.getElementById("tonder-checkout")
     try {
@@ -56,7 +65,7 @@ export class Checkout {
       console.error(error)
     }
   }
-  stylishButton = (element) => {
+  stylishButton = (element: HTMLElement) => {
     element.style.backgroundColor = this.backgroundColor
     element.style.color = this.color
     element.style.display = 'flex'
@@ -68,7 +77,7 @@ export class Checkout {
     element.style.width = '100%'
     element.style.boxShadow = '0 3px 6px 0 rgba(0,0,0,0.16)'
   }
-  setOrder = ({products, email, shippingCost }) => {
+  setOrder = ({ products, email, shippingCost }: { products: any, email: string, shippingCost: string }) => {
     let _order: any = {}
     if (products) _order.products = products 
     if (email) _order.email = email 
@@ -76,7 +85,7 @@ export class Checkout {
     this.order = {...this.order, ..._order}
     return this.order
   }
-  openTabListener = (tab, button) => {
+  openTabListener = (tab: any, button: HTMLButtonElement) => {
     const tabInterval = setInterval(() => {
       if (tab.closed) {
         clearInterval(tabInterval);
@@ -127,7 +136,7 @@ export class Checkout {
     const queryString = new URLSearchParams(params).toString();
     return queryString
   }
-  receiveMessage(event) {
+  receiveMessage(event: any) {
     // Parse data if it is possible, in case of error it will return the raw data.
     try {
       const data = JSON.parse(event.data)

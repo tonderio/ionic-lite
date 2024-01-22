@@ -1,4 +1,4 @@
-import { cardTemplate } from '../helpers/template.js'
+import { cardTemplate } from '../helpers/template'
 import {
   getBusiness,
   customerRegister,
@@ -6,50 +6,53 @@ import {
   createPayment,
   startCheckoutRouter,
   getOpenpayDeviceSessionID
-} from '../data/api.js';
+} from '../data/api';
 import {
   showError
-} from '../helpers/utils.js';
-import { initSkyflow } from '../helpers/skyflow.js'
-import { ThreeDSHandler } from './3dsHandler.js';
-import { Customer, Business } from '../types/commons-ds.ts';
+} from '../helpers/utils';
+import { initSkyflow } from '../helpers/skyflow'
+import { ThreeDSHandler } from './3dsHandler';
+import { Customer, Business, OrderItem, PaymentData } from '../types/commons-ds';
 
 export type InlineCheckoutConstructor = {
   returnUrl: string,
   apiKey: string,
-  successUrl: string,
+  successUrl?: string,
   renderPaymentButton: boolean,
-  callBack: (params: any) => void,
-  styles: any
+  callBack?: (params: any) => void,
+  styles?: any,
+  form?: any,
+  totalElement?: any
 }
 
 export class InlineCheckout {
   static injected: boolean = false;
-  customer = {}
+  paymentData = {}
   items = []
-  baseUrl = process.env.BASE_URL || "https://stage.tonder.io";
+  //@ts-ignore
+  baseUrl = "https://stage.tonder.io";
   collectContainer: any = null
-  cartTotal = null
+  cartTotal?: string | null | number
   apiKeyTonder?: string
   returnUrl?: string
   successUrl?: string
   renderPaymentButton: boolean
-  callBack: (params) => void
+  callBack: (params: any) => void
   customStyles: any
   abortController: AbortController
   process3ds: ThreeDSHandler
-  cb: () => void
-  firstName: string
-  lastName: string
-  country: string
-  address: string
-  city: string
-  state: string
-  postCode: string
-  email: string
-  phone: string
-  merchantData: Business
-  cartItems: any[]
+  cb?: () => void
+  firstName?: string
+  lastName?: string
+  country?: string
+  address?: string
+  city?: string
+  state?: string
+  postCode?: string
+  email?: string
+  phone?: string
+  merchantData?: Business
+  cartItems?: any
   injectInterval: any
 
   constructor ({
@@ -68,9 +71,11 @@ export class InlineCheckout {
     this.customStyles = styles
 
     this.abortController = new AbortController()
-    this.process3ds = new ThreeDSHandler(
-      { apiKey: apiKey, baseUrl: this.baseUrl, successUrl: successUrl }
-    )
+    this.process3ds = new ThreeDSHandler({ 
+      apiKey: apiKey, 
+      baseUrl: this.baseUrl, 
+      successUrl: successUrl 
+    })
   }
 
   #mountPayButton() {
@@ -90,11 +95,11 @@ export class InlineCheckout {
     };
   }
 
-  async #handlePaymentClick(payButton) {
+  async #handlePaymentClick(payButton: any) {
     const prevButtonContent = payButton.innerHTML;
     payButton.innerHTML = `<div class="lds-dual-ring"></div>`;
     try {
-      const response = await this.payment(this.customer);
+      const response = await this.payment(this.paymentData);
       this.callBack(response);
     } catch (error) {
       console.error("Payment error:", error);
@@ -103,13 +108,14 @@ export class InlineCheckout {
     }
   }
 
-  payment(data) {
+  payment(data: any) {
     return new Promise(async (resolve, reject) => {
       try {
         this.#handleCustomer(data.customer)
         this.setCartTotal(data.cart?.total)
         this.setCartItems(data.cart?.items)
         const response: string | null = await this.#checkout()
+        console.log("payment response", response);
         if (response) {
           const process3ds = new ThreeDSHandler({ payload: response });
           this.callBack(response);
@@ -140,12 +146,22 @@ export class InlineCheckout {
     this.phone = customer?.phone
   }
 
-  setCartItems (items) {
+  setCartItems (items: OrderItem[]) {
     console.log('items: ', items)
     this.cartItems = items
   }
 
-  setCartTotal (total) {
+  setCustomerEmail (email: string) {
+    console.log('email: ', email)
+    this.email = email
+  }
+
+  setPaymentData (data?: PaymentData) {
+    if (!data) return
+    this.paymentData = data
+  }
+
+  setCartTotal (total: string | number) {
     console.log('total: ', total)
     this.cartTotal = total
     this.#updatePayButton()
@@ -157,7 +173,7 @@ export class InlineCheckout {
     payButton.textContent = `Pagar $${this.cartTotal}`;
   }
 
-  setCallback (cb) {
+  setCallback (cb: any) {
     this.cb = cb
   }
 
@@ -178,32 +194,37 @@ export class InlineCheckout {
   async #fetchMerchantData() {
     this.merchantData = await getBusiness(
       this.baseUrl,
-      this.apiKeyTonder,
-      this.abortController.signal
+      this.abortController.signal,
+      this.apiKeyTonder
     );
     return this.merchantData
   }
 
-  async getCustomer(email, signal) {
-    return await customerRegister(this.baseUrl, this.apiKeyTonder, email, signal);
+  async getCustomer(email: string, signal: AbortSignal) {
+    return await customerRegister(this.baseUrl, email, signal, this.apiKeyTonder);
   }
 
   async #mountTonder() {
+
     this.#mountPayButton()
 
-    const {
-      vault_id,
-      vault_url,
-    } = await this.#fetchMerchantData();
+    const result = await this.#fetchMerchantData();
 
-    this.collectContainer = await initSkyflow(
-      vault_id,
-      vault_url,
-      this.baseUrl,
-      this.apiKeyTonder,
-      this.abortController.signal,
-      this.customStyles,
-    );
+    if(result) {
+      
+      const { vault_id, vault_url } = result;
+
+      this.collectContainer = await initSkyflow(
+        vault_id,
+        vault_url,
+        this.baseUrl,
+        this.abortController.signal,
+        this.customStyles,
+        this.apiKeyTonder
+      );
+
+    }
+
   }
 
   removeCheckout() {
@@ -225,110 +246,117 @@ export class InlineCheckout {
     } catch (error) {
     }
 
-    const { openpay_keys, reference, business } = this.merchantData
-    const total = Number(this.cartTotal)
+    if(this.merchantData) {
 
-    var cardTokensSkyflowTonder: any = null;
-    try {
-      const collectResponseSkyflowTonder = await this.collectContainer?.collect();
-      cardTokensSkyflowTonder = await collectResponseSkyflowTonder["records"][0]["fields"];
-    } catch (error) {
-      showError("Por favor, verifica todos los campos de tu tarjeta")
-      throw error;
-    }
+      const { openpay_keys, reference, business } = this.merchantData
+      const total = Number(this.cartTotal)
 
-    try {
-      let deviceSessionIdTonder;
-      if (openpay_keys.merchant_id && openpay_keys.public_key) {
-        deviceSessionIdTonder = await getOpenpayDeviceSessionID(
-          openpay_keys.merchant_id,
-          openpay_keys.public_key,
-          this.abortController.signal
-        );
+      var cardTokensSkyflowTonder: any = null;
+      try {
+        const collectResponseSkyflowTonder = await this.collectContainer?.collect();
+        cardTokensSkyflowTonder = await collectResponseSkyflowTonder["records"][0]["fields"];
+      } catch (error) {
+        showError("Por favor, verifica todos los campos de tu tarjeta")
+        throw error;
       }
 
-      const { auth_token } = await this.getCustomer(this.email, this.abortController.signal);
+      try {
+        let deviceSessionIdTonder;
+        console.log("this.email", this.email);
+        if (openpay_keys.merchant_id && openpay_keys.public_key) {
+          deviceSessionIdTonder = await getOpenpayDeviceSessionID(
+            openpay_keys.merchant_id,
+            openpay_keys.public_key,
+            this.abortController.signal
+          );
+        }
 
-      var orderItems = {
-        business: this.apiKeyTonder,
-        client: auth_token,
-        billing_address_id: null,
-        shipping_address_id: null,
-        amount: total,
-        status: "A",
-        reference: reference,
-        is_oneclick: true,
-        items: this.cartItems,
-      };
-      console.log('orderItems: ', orderItems)
-      const jsonResponseOrder = await createOrder(
-        this.baseUrl,
-        this.apiKeyTonder,
-        orderItems
-      );
+        if(this.email) {
 
-      // Create payment
-      const now = new Date();
-      const dateString = now.toISOString();
+          const { auth_token } = await this.getCustomer(this.email, this.abortController.signal);
 
-      var paymentItems = {
-        business_pk: business.pk,
-        amount: total,
-        date: dateString,
-        order: jsonResponseOrder.id,
-      };
-      const jsonResponsePayment = await createPayment(
-        this.baseUrl,
-        this.apiKeyTonder,
-        paymentItems
-      );
+          var orderItems = {
+            business: this.apiKeyTonder,
+            client: auth_token,
+            billing_address_id: null,
+            shipping_address_id: null,
+            amount: total,
+            status: "A",
+            reference: reference,
+            is_oneclick: true,
+            items: this.cartItems,
+          };
+          console.log('orderItems: ', orderItems)
+          const jsonResponseOrder = await createOrder(
+            this.baseUrl,
+            orderItems,
+            this.apiKeyTonder
+          );
 
-      // Checkout router
-      const routerItems = {
-        card: cardTokensSkyflowTonder,
-        name: cardTokensSkyflowTonder.cardholder_name,
-        last_name: "",
-        email_client: this.email,
-        phone_number: this.phone,
-        return_url: this.returnUrl,
-        id_product: "no_id",
-        quantity_product: 1,
-        id_ship: "0",
-        instance_id_ship: "0",
-        amount: total,
-        title_ship: "shipping",
-        description: "transaction",
-        device_session_id: deviceSessionIdTonder ? deviceSessionIdTonder : null,
-        token_id: "",
-        order_id: jsonResponseOrder.id,
-        business_id: business.pk,
-        payment_id: jsonResponsePayment.pk,
-        source: 'sdk',
-      };
-      const jsonResponseRouter = await startCheckoutRouter(
-        this.baseUrl,
-        this.apiKeyTonder,
-        routerItems
-      );
+          // Create payment
+          const now = new Date();
+          const dateString = now.toISOString();
 
-      console.log("jsonResponseRouter", jsonResponseRouter);
+          var paymentItems = {
+            business_pk: business.pk,
+            amount: total,
+            date: dateString,
+            order: jsonResponseOrder.id,
+          };
+          const jsonResponsePayment = await createPayment(
+            this.baseUrl,
+            paymentItems,
+            this.apiKeyTonder
+          );
 
-      if (jsonResponseRouter) {
-        try {
-          const selector: any = document.querySelector("#tonderPayButton");
-          if(selector) {
-            selector.disabled = false;
+          // Checkout router
+          const routerItems = {
+            card: cardTokensSkyflowTonder,
+            name: cardTokensSkyflowTonder.cardholder_name,
+            last_name: "",
+            email_client: this.email,
+            phone_number: this.phone,
+            return_url: this.returnUrl,
+            id_product: "no_id",
+            quantity_product: 1,
+            id_ship: "0",
+            instance_id_ship: "0",
+            amount: total,
+            title_ship: "shipping",
+            description: "transaction",
+            device_session_id: deviceSessionIdTonder ? deviceSessionIdTonder : null,
+            token_id: "",
+            order_id: jsonResponseOrder.id,
+            business_id: business.pk,
+            payment_id: jsonResponsePayment.pk,
+            source: 'sdk',
+          };
+          const jsonResponseRouter = await startCheckoutRouter(
+            this.baseUrl,
+            routerItems,
+            this.apiKeyTonder
+          );
+
+          console.log("jsonResponseRouter", jsonResponseRouter);
+
+          if (jsonResponseRouter) {
+            try {
+              const selector: any = document.querySelector("#tonderPayButton");
+              if(selector) {
+                selector.disabled = false;
+              }
+            } catch {}
+            return jsonResponseRouter;
+          } else {
+            showError("No se ha podido procesar el pago")
+            return false;
           }
-        } catch {}
-        return jsonResponseRouter;
-      } else {
-        showError("No se ha podido procesar el pago")
-        return false;
+        }
+      } catch (error) {
+        console.log(error);
+        showError("Ha ocurrido un error")
+        throw error;
       }
-    } catch (error) {
-      console.log(error);
-      showError("Ha ocurrido un error")
-      throw error;
     }
   };
 }

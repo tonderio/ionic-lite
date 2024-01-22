@@ -29,8 +29,8 @@ export async function addScripts() {
   }
 }
 
-export function toCurrency(value) {
-  if (isNaN(parseFloat(value))) {
+export function toCurrency(value: string | number) {
+  if (typeof value === "string" && isNaN(parseFloat(value))) {
     return value;
   }
   var formatter = new Intl.NumberFormat("es-MX", {
@@ -38,10 +38,10 @@ export function toCurrency(value) {
     currency: "MXN",
     minimumFractionDigits: 2
   });
-  return formatter.format(value);
+  return typeof value === "number" && formatter.format(value);
 }
 
-export function showError(message) {
+export function showError(message: string) {
   var msgErrorDiv: any = document.getElementById("msgError");
   msgErrorDiv.classList.add("error-container");
   msgErrorDiv.innerHTML = message;
