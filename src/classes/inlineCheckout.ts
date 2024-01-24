@@ -115,7 +115,6 @@ export class InlineCheckout {
         this.setCartTotal(data.cart?.total)
         this.setCartItems(data.cart?.items)
         const response: string | null = await this.#checkout()
-        console.log("payment response", response);
         if (response) {
           const process3ds = new ThreeDSHandler({ payload: response });
           this.callBack(response);
@@ -132,7 +131,6 @@ export class InlineCheckout {
   }
 
   #handleCustomer(customer: Customer) {
-    console.log('customer: ', customer)
     if (!customer) return
 
     this.firstName = customer?.firstName
@@ -147,12 +145,10 @@ export class InlineCheckout {
   }
 
   setCartItems (items: OrderItem[]) {
-    console.log('items: ', items)
     this.cartItems = items
   }
 
   setCustomerEmail (email: string) {
-    console.log('email: ', email)
     this.email = email
   }
 
@@ -162,7 +158,6 @@ export class InlineCheckout {
   }
 
   setCartTotal (total: string | number) {
-    console.log('total: ', total)
     this.cartTotal = total
     this.#updatePayButton()
   }
@@ -261,8 +256,9 @@ export class InlineCheckout {
       }
 
       try {
-        let deviceSessionIdTonder;
-        console.log("this.email", this.email);
+
+        let deviceSessionIdTonder: any;
+
         if (openpay_keys.merchant_id && openpay_keys.public_key) {
           deviceSessionIdTonder = await getOpenpayDeviceSessionID(
             openpay_keys.merchant_id,
@@ -286,7 +282,7 @@ export class InlineCheckout {
             is_oneclick: true,
             items: this.cartItems,
           };
-          console.log('orderItems: ', orderItems)
+          
           const jsonResponseOrder = await createOrder(
             this.baseUrl,
             orderItems,
@@ -331,13 +327,12 @@ export class InlineCheckout {
             payment_id: jsonResponsePayment.pk,
             source: 'sdk',
           };
+          
           const jsonResponseRouter = await startCheckoutRouter(
             this.baseUrl,
             routerItems,
             this.apiKeyTonder
           );
-
-          console.log("jsonResponseRouter", jsonResponseRouter);
 
           if (jsonResponseRouter) {
             try {

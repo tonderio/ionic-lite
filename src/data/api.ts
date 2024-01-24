@@ -1,5 +1,11 @@
+import { TokensRequest } from "../types/skyflow.ds";
+import Skyflow from "skyflow-js";
+
+declare global {
+  interface Window { OpenPay: any; }
+}
+
 export async function getOpenpayDeviceSessionID(merchant_id: string, public_key: string, signal: AbortSignal) {
-  //@ts-ignore
   let openpay = await window.OpenPay;
   openpay.setId(merchant_id);
   openpay.setApiKey(public_key);
@@ -101,5 +107,85 @@ export async function startCheckoutRouter(baseUrlTonder: string, routerItems: an
     }
   } catch (error) {
     throw error
+  }
+}
+
+export async function getSkyflowTokens({ baseUrl, apiKey, vault_id, vault_url, signal, data }: TokensRequest): Promise<any> {
+
+  const skyflow = Skyflow.init({
+    vaultID: vault_id,
+    vaultURL: vault_url,
+    getBearerToken: async () => await getVaultToken({ baseUrl, apiKey, signal }),
+    options: {
+      logLevel: Skyflow.LogLevel.ERROR,
+      env: Skyflow.Env.DEV,
+    },
+  });
+
+  const collectContainer: any = skyflow.container(
+    Skyflow.ContainerType.COLLECT
+  );
+
+  const fields = await Promise.all(Object.keys(data).map(async (key) => {
+    const cardHolderNameElement = await collectContainer.create({
+      table: "cards",
+      column: key,
+      type: Skyflow.ElementType.INPUT_FIELD
+    });
+    return { element: cardHolderNameElement, key: key};
+  }))
+
+  const fieldPromises: Promise<any>[] = fields.map((field) => {
+    return new Promise((resolve, reject) => {
+      const div = document.createElement("div")
+      div.hidden = true;
+      div.id = `id-${field.key}`
+      document.querySelector(`body`)?.appendChild(div);
+      setTimeout(() => {
+        field.element.mount(`#id-${field.key}`)
+        setInterval(() => {
+          if(field.element.isMounted()) {
+            const value = data[field.key];
+            field.element.update({ value: value });
+            return resolve(field.element.isMounted())
+          }
+        }, 120)
+      }, 120)
+    })
+  })
+  
+
+  const result = await Promise.all(fieldPromises)
+
+  const mountFail = result.find((item: boolean) => !item)
+
+  if(mountFail) {
+    return { error: "Ocurrió un error al montar los campos de la tarjeta" }
+  } else {
+    try {
+      const collectResponseSkyflowTonder = await collectContainer.collect();
+      return collectResponseSkyflowTonder["records"][0]["fields"];
+    } catch (error) {
+      console.error("Por favor, verifica todos los campos de tu tarjeta")
+      return { error: "Por favor, verifica todos los campos de tu tarjeta" }
+    }
+  }
+
+}
+
+export async function getVaultToken({ baseUrl, apiKey, signal }: { baseUrl: string, apiKey: string, signal: AbortSignal }) {
+  const response = await fetch(`${baseUrl}/api/v1/vault-token/`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Token ${apiKey}`
+    },
+    signal: signal,
+  });
+
+  if (response.ok) {
+    const responseBody = await response.json();
+    return responseBody.token;
+  } else {
+    throw new Error('Failed to retrieve bearer token');
   }
 }
