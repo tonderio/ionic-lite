@@ -18,14 +18,18 @@ module.exports = (env, argv) => {
   }
 
   return {
+    devtool: 'inline-source-map',
     mode: isProduction ? 'production' : 'development',
-    entry: isProduction ? './src/index.js': './src/index-dev.js',
+    entry: isProduction ? './src/index.ts': './src/index-dev.js',
     output: {
       path: path.resolve(__dirname, 'v1'),
       filename: isProduction ? 'bundle.min.js' : 'bundle.js',
       library: 'TonderSdk',
       libraryTarget: 'umd',
       globalObject: 'this',
+    },
+    resolve: {
+      extensions: ['.tsx', '.ts', '.js'],
     },
     devtool: isProduction ? false : 'inline-source-map',
     devServer: {
@@ -39,6 +43,15 @@ module.exports = (env, argv) => {
         {
           test: /\.css$/,
           use: ['style-loader', 'css-loader'],
+        },
+        {
+          test: /\.tsx?$/,
+          use: [
+              {
+                  loader: 'ts-loader',
+              },
+          ],
+          include: [path.resolve(__dirname, 'src')],
         },
         {
           test: /\.js$/,
