@@ -23,11 +23,8 @@ export type VaultRequest = {
 }
 
 export type TokensRequest = {
-    baseUrl: string, 
     vault_id: string, 
     vault_url: string, 
-    apiKey: string,
-    signal: AbortSignal,
     data: {
         [key: string]: any;
     }
