@@ -2,7 +2,8 @@
   "name": "@tonder/ionic-lite-sdk",
   "version": "0.0.1",
   "description": "Tonder ionic lite SDK",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.js",
   "scripts": {
     "start": "webpack-dev-server",
     "build": "tsc && webpack --config webpack.config.js --mode production"
@@ -26,6 +27,7 @@
     "style-loader": "^3.3.1",
     "terser-webpack-plugin": "^5.3.10",
     "ts-loader": "^9.5.1",
+    "types-webpack-bundler": "^1.0.2",
     "typescript": "^5.3.3",
     "webpack": "^5.75.0",
     "webpack-cli": "^5.0.1",
