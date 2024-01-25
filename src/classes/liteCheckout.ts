@@ -1,4 +1,4 @@
-import { TokensRequest } from "../types/skyflow.ds";
+import { TokensRequest } from "../types/skyflow";
 import Skyflow from "skyflow-js";
 
 declare global {
@@ -17,18 +17,18 @@ export class LiteCheckout {
   signal: AbortSignal;
   apiKeyTonder: string;
 
-  constructor ({ signal, baseUrlTonder, apiKeyTonder }) {
+  constructor ({ signal, baseUrlTonder, apiKeyTonder }: LiteCheckoutConstructor) {
     this.baseUrlTonder = baseUrlTonder;
     this.signal = signal;
     this.apiKeyTonder = apiKeyTonder;
   }
 
-  async getOpenpayDeviceSessionID(merchant_id: string, public_key: string, signal: AbortSignal) {
+  async getOpenpayDeviceSessionID(merchant_id: string, public_key: string) {
     let openpay = await window.OpenPay;
     openpay.setId(merchant_id);
     openpay.setApiKey(public_key);
     openpay.setSandboxMode(true);
-    var response = await openpay.deviceData.setup({signal});
+    var response = await openpay.deviceData.setup({ signal: this.signal });
     return response;
   }
   async getBusiness() {

@@ -1,4 +1,4 @@
-import * as LiteCheckout from './data/api'
+import { LiteCheckout } from './classes/liteCheckout'
 
 export {
     LiteCheckout
