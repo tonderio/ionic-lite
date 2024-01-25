@@ -1,41 +1,62 @@
 # Tonder SDK
 
-Tonder SDK helps to integrate the services Tonder offers in your own website
+Tonder SDK Lite to integrate REST service
 
 ## Installation
 
 You can install using NPM
 ```bash
-npm i tonder-sdk-test
+npm i @tonder/ionic-lite-sdk
 ```
 
 or using an script tag
 ```html
-<script src="https://zplit-stage.s3.amazonaws.com/v1/bundle.min.js"></script>
+// TO DO
 ```
 
 Add dependencies to the root of the app (index.html)
 ```html
-<script src="https://js.skyflow.com/v1/index.js"></script>
 <script src="https://openpay.s3.amazonaws.com/openpay.v1.min.js"></script>
 <script src="https://openpay.s3.amazonaws.com/openpay-data.v1.min.js"></script>
 ```
 
 ## Usage
-HTML
-```html
-<div>
-    <h1>Checkout</h1>
-    <!-- You have to add an entry point with the ID 'tonder-checkout' -->
-    <div id="tonder-checkout">
-    </div>
-</div>
-```
-## Javascript Example
+## Import LiteCheckout class
 ```javascript
-import { InlineCheckout } from "tonder-sdk-test" // Not required if using script tag
+import { LiteCheckout } from "@tonder/ionic-lite-sdk"
+```
+## Create instance
+
+```javascript
+const liteCheckout = new LiteCheckout({ 
+  signal, 
+  baseUrlTonder, 
+  apiKeyTonder 
+})
 ```
 
+| Property        | Type          | Description                                                             |
+|:---------------:|:-------------:|:-----------------------------------------------------------------------:|
+| signal          | AborSignal    | Signal from AbortController instance if it need cancel request          |
+| baseUrlTonder   | string        | Live server: http://stage.tonder.io                                     |
+|                 |               | Mock Server: https://stoplight.io/mocks/tonder/tonder-api-v1-2/3152148  |
+| apiKeyTonder    | string        | You can take this from you Tonder Dashboard                             |
+
+## Class methods
+
+# Get business
+
+```javascript
+const merchantData = await liteCheckout.getBusiness();
+```
+# Response
+
+| Property        | Type          | Description                                                             |
+|:---------------:|:-------------:|:-----------------------------------------------------------------------:|
+| signal          | AborSignal    | Signal from AbortController instance if it need cancel request          |
+| baseUrlTonder   | string        | Live server: http://stage.tonder.io                                     |
+|                 |               | Mock Server: https://stoplight.io/mocks/tonder/tonder-api-v1-2/3152148  |
+| apiKeyTonder    | string        | You can take this from you Tonder Dashboard                             |
 
 ```javascript
 const customStyles = {
