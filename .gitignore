@@ -2,3 +2,5 @@
 .vscode
 lib
 .env
+dist/*
+types/*

@@ -1,14 +1,15 @@
 const path = require('path');
 const TerserPlugin = require('terser-webpack-plugin');
+const DeclarationBundlerPlugin = require('types-webpack-bundler');
 
 module.exports = (env, argv) => {
   return {
     mode: 'production',
     entry: './src/index.ts',
     output: {
-      path: path.resolve(__dirname, 'v1'),
-      filename: 'bundle.min.js',
-      library: '@tonder-ionic/sdk',
+      path: path.resolve(__dirname, 'dist'),
+      filename: 'index.js',
+      library: '@tonder/ionic-lite-sdk',
       libraryTarget: 'umd',
       globalObject: 'this',
     },
@@ -23,9 +24,12 @@ module.exports = (env, argv) => {
           use: [
               {
                   loader: 'ts-loader',
+                  options: {
+                    transpileOnly: false
+                  }
               },
           ],
-          include: [path.resolve(__dirname, 'src')],
+          include: [path.resolve(__dirname, 'src')]
         },
         {
           test: /\.js$/,
@@ -46,5 +50,11 @@ module.exports = (env, argv) => {
         }),
       ],
     },
+    plugins: [
+      new DeclarationBundlerPlugin({
+          moduleName:'IonicLiteSdk',
+          out:'./index.d.ts',
+      })
+    ]
   };
 };
