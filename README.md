@@ -23,7 +23,7 @@ Add dependencies to the root of the app (index.html)
 ## Usage
 ## Import LiteCheckout class
 ```javascript
-import { LiteCheckout } from @tonder/ionic-lite-sdk
+import { LiteCheckout } from "@tonder/ionic-lite-sdk"
 ```
 ## Create instance
 
