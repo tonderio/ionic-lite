@@ -1,93 +1,431 @@
-# Light
+# Tonder SDK
 
-
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/grupoapok/tonder/sdk/ionic/light.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitlab.com/grupoapok/tonder/sdk/ionic/light/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Tonder SDK Lite to integrate REST service
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+
+You can install using NPM
+```bash
+npm i @tonder/ionic-lite-sdk
+```
+
+or using an script tag
+```html
+// TO DO
+```
+
+Add dependencies to the root of the app (index.html)
+```html
+<script src=https://openpay.s3.amazonaws.com/openpay.v1.min.js></script>
+<script src=https://openpay.s3.amazonaws.com/openpay-data.v1.min.js></script>
+```
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Import LiteCheckout class
+```javascript
+import { LiteCheckout } from "@tonder/ionic-lite-sdk"
+```
+## Create instance
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```javascript
+const liteCheckout = new LiteCheckout({ 
+  signal, 
+  baseUrlTonder, 
+  apiKeyTonder 
+})
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+| Property        | Type          | Description                                                             |
+|:---------------:|:-------------:|:-----------------------------------------------------------------------:|
+| signal          | AborSignal    | Signal from AbortController instance if it need cancel request          |
+| baseUrlTonder   | string        | Live server: http://stage.tonder.io                                     |
+|                 |               | Mock Server: https://stoplight.io/mocks/tonder/tonder-api-v1-2/3152148  |
+| apiKeyTonder    | string        | You can take this from you Tonder Dashboard                             |
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+# Class methods
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+# Business
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## Get business
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```javascript
+const merchantData = await liteCheckout.getBusiness();
+```
+
+## Return business data
+
+```typescript
+{
+    business: {
+        pk: number,
+        name: string,
+        categories: [
+          {
+            pk: number,
+            name: string
+          }
+        ],
+        web: string,
+        logo: string,
+        full_logo_url: string,
+        background_color: string,
+        primary_color: string,
+        checkout_mode: boolean,
+        textCheckoutColor: string,
+        textDetailsColor: string,
+        checkout_logo: string
+    },
+    openpay_keys: {
+        merchant_id: string,
+        public_key: string
+    },
+    fintoc_keys: {
+        public_key: string
+    },
+    vault_id: string,
+    vault_url: string,
+    reference: number,
+    is_installments_available: boolean
+}
+```
+
+# OpenPay
+
+## Get OpenPay session id
+
+```javascript
+const { openpay_keys } = merchantData;
+
+const deviceSessionIdTonder = await liteCheckout.getOpenpayDeviceSessionID(
+  openpay_keys.merchant_id,
+  openpay_keys.public_key
+);
+```
+
+Return OpenPay device session id
+
+# Customer
+
+## Get customer authorization token
+
+```javascript
+const customerEmail = "john.c.calhoun@examplepetstore.com";
+
+const { auth_token } = await liteCheckout.customerRegister(customerEmail);
+```
+
+## Return customer data
+
+```typescript
+{
+    id: number,
+    email: string,
+    auth_token: string
+}
+```
+
+# Order
+
+## Create order
+
+```typescript
+const cartItems = [
+  {
+    description: Test product description,
+    quantity: 1,
+    price_unit: 25,
+    discount: 0,
+    taxes: 12,
+    product_reference: 65421,
+    name: Test product,
+    amount_total: 25
+  }
+]
+
+const { reference } = merchantData;
+
+const orderData = {
+  business: apiKeyTonder,
+  client: auth_token,
+  billing_address_id: null,
+  shipping_address_id: null,
+  amount: total,
+  status: A,
+  reference: reference,
+  is_oneclick: true,
+  items: cartItems,
+};
+
+const jsonResponseOrder = await liteCheckout.createOrder(
+  orderData
+);
+```
+
+## Return order data
+```typescript
+{
+    id: number,
+    created: string,
+    amount: string,
+    status: string,
+    payment_method?: string,
+    reference?: string,
+    is_oneclick: boolean,
+    items: [
+        {
+            description: string,
+            product_reference: string,
+            quantity: string,
+            price_unit: string,
+            discount: string,
+            taxes: string,
+            amount_total: string
+        }
+    ],
+    billing_address?: string,
+    shipping_address?: string,
+    client: {
+        email: string,
+        name: string,
+        first_name: string,
+        last_name: string,
+        client_profile: {
+            gender: string,
+            date_birth?: string,
+            terms: boolean,
+            phone: string
+        }
+    }
+}
+```
+
+# Payment
+
+## Create payment
+```javascript
+const now = new Date();
+const dateString = now.toISOString();
+
+const paymentData = {
+  business_pk: business.pk,
+  amount: total,
+  date: dateString,
+  order: jsonResponseOrder.id,
+};
+
+const jsonResponsePayment = await liteCheckout.createPayment(
+  paymentData
+);
+```
+
+## Return payment data
+```javascript
+{
+  pk: number,
+  order?: string,
+  amount: string,
+  status: string,
+  date: string,
+  paid_date?: string,
+  shipping_address: {
+    street: string,
+    number: string,
+    suburb: string,
+    city: {
+      name: string
+    },
+    state: {
+      name: string,
+      country: {
+          name: string
+      }
+    },
+    zip_code: string
+  },
+  shipping_address_id?: string,
+  billing_address: {
+    street: string,
+    number: string,
+    suburb: string,
+    city: {
+      name: string
+    },
+    state: {
+      name: string,
+      country: {
+        name: string
+      }
+    },
+    zip_code: string
+  },
+  billing_address_id?: string,
+  client?: string,
+  customer_order_reference?: string
+}
+```
+
+# Skyflow tokens
+
+## Get skyflow payment form tokenized values
+
+The values of the variable skyflowTokens come from your html form
+
+```javascript
+
+const skyflowFields = {
+  card_number: this.paymentForm.value.cardNumber,
+  cvv: this.paymentForm.value.cvv,
+  expiration_month: this.paymentForm.value.month,
+  expiration_year: this.paymentForm.value.expirationYear,
+  cardholder_name: this.paymentForm.value.name
+}
+
+const { vault_id, vault_url } = merchantData;
+
+
+const skyflowTokens = await liteCheckout.getSkyflowTokens({
+  vault_id: vault_id,
+  vault_url: vault_url,
+  data: skyflowFields
+})
+
+```
+
+## Return skyflow tokenized data
+```typescript
+{
+    vaultID: string,
+    responses: [
+        {
+            records: [
+                {
+                    skyflow_id: string
+                }
+            ]
+        },
+        {
+            fields: {
+                card_number: string,
+                cardholder_name: string,
+                cvv: string,
+                expiration_month: string,
+                expiration_year: string,
+                skyflow_id: string
+            }
+        }
+    ]
+}
+```
+
+# Checkout router
+
+## Get checkout router data
+
+```javascript
+
+const customerPhone = "+11111111";
+const returnUrl = "http://localhost:8100/payment/success";
+
+const routerData = {
+  card: skyflowTokens,
+  name: skyflowTokens.cardholder_name,
+  last_name: "",
+  email_client: customerEmail,
+  phone_number: customerPhone,
+  return_url: returnUrl,
+  id_product: "no_id",
+  quantity_product: 1,
+  id_ship: "0",
+  instance_id_ship: "0",
+  amount: total,
+  title_ship: "shipping",
+  description: "Transaction from the lite SDK",
+  device_session_id: deviceSessionIdTonder,
+  token_id: "",
+  order_id: jsonResponseOrder.id,
+  business_id: business.pk,
+  payment_id: jsonResponsePayment.pk,
+  source: 'ionic-lite-sdk',
+};
+
+const jsonResponseRouter = await liteCheckout.startCheckoutRouter(
+  routerData
+);
+
+```
+
+## Return checkout router data
+
+```typescript
+{
+    status: 200,
+    message: Success,
+    psp_response: {
+        id: string,
+        authorization: number,
+        operation_type: string,
+        transaction_type: string,
+        status: string,
+        conciliated: boolean,
+        creation_date: string,
+        operation_date: string,
+        description: string,
+        error_message?: string,
+        order_id?: string,
+        card: {
+            type: string,
+            brand: string,
+            address?: string,
+            card_number: string,
+            holder_name: string,
+            expiration_year: string,
+            expiration_month: string,
+            allows_charges: boolean,
+            allows_payouts: boolean,
+            bank_name: string,
+            points_type: string,
+            points_card: boolean,
+            bank_code: number
+        },
+        customer_id: string,
+        gateway_card_present: string,
+        amount: number,
+        fee: {
+            amount: number,
+            tax: number,
+            currency: string
+        },
+        payment_method: {
+            type: string,
+            url: string
+        },
+        currency: string,
+        method: string,
+        object: string
+    },
+    transaction_status: string,
+    transaction_id: number,
+    payment_id: number,
+    provider: string,
+    next_action: {
+        redirect_to_url: {
+            url: string,
+            return_url: string,
+            verify_transaction_status_url: string
+        }
+    },
+    actions: [
+        {
+            name: string,
+            url: string,
+            method: string
+        }
+    ]
+}
+```
+
+Take actions on base to the checkout router response
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+[MIT](https://choosealicense.com/licenses/mit/)
