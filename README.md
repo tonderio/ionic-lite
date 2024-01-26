@@ -16,14 +16,14 @@ or using an script tag
 
 Add dependencies to the root of the app (index.html)
 ```html
-<script src="https://openpay.s3.amazonaws.com/openpay.v1.min.js"></script>
-<script src="https://openpay.s3.amazonaws.com/openpay-data.v1.min.js"></script>
+<script src=https://openpay.s3.amazonaws.com/openpay.v1.min.js></script>
+<script src=https://openpay.s3.amazonaws.com/openpay-data.v1.min.js></script>
 ```
 
 ## Usage
 ## Import LiteCheckout class
 ```javascript
-import { LiteCheckout } from "@tonder/ionic-lite-sdk"
+import { LiteCheckout } from @tonder/ionic-lite-sdk
 ```
 ## Create instance
 
@@ -49,170 +49,369 @@ const liteCheckout = new LiteCheckout({
 ```javascript
 const merchantData = await liteCheckout.getBusiness();
 ```
-# Response
 
-| Property        | Type          | Description                                                             |
-|:---------------:|:-------------:|:-----------------------------------------------------------------------:|
-| signal          | AborSignal    | Signal from AbortController instance if it need cancel request          |
-| baseUrlTonder   | string        | Live server: http://stage.tonder.io                                     |
-|                 |               | Mock Server: https://stoplight.io/mocks/tonder/tonder-api-v1-2/3152148  |
-| apiKeyTonder    | string        | You can take this from you Tonder Dashboard                             |
+# Return business data
+
+```typescript
+{
+    business: {
+        pk: number,
+        name: string,
+        categories: [
+          {
+            pk: number,
+            name: string
+          }
+        ],
+        web: string,
+        logo: string,
+        full_logo_url: string,
+        background_color: string,
+        primary_color: string,
+        checkout_mode: boolean,
+        textCheckoutColor: string,
+        textDetailsColor: string,
+        checkout_logo: string
+    },
+    openpay_keys: {
+        merchant_id: string,
+        public_key: string
+    },
+    fintoc_keys: {
+        public_key: string
+    },
+    vault_id: string,
+    vault_url: string,
+    reference: number,
+    is_installments_available: boolean
+}
+```
+
+# Get OpenPay session id
 
 ```javascript
-const customStyles = {
-  inputStyles: {
-    base: {
-      border: "1px solid #e0e0e0",
-      padding: "10px 7px",
-      borderRadius: "5px",
-      color: "#1d1d1d",
-      marginTop: "2px",
-      backgroundColor: "white",
-      fontFamily: '"Inter", sans-serif',
-      fontSize: '16px',
-      '&::placeholder': {
-        color: "#ccc",
-      },
-    },
-    cardIcon: {
-      position: 'absolute',
-      left: '6px',
-      bottom: 'calc(50% - 12px)',
-    },
-    complete: {
-      color: "#4caf50",
-    },
-    empty: {},
-    focus: {},
-    invalid: {
-      border: "1px solid #f44336",
-    },
-    global: {
-      '@import': 'url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&display=swap")',
-    }
-  },
-  labelStyles: {
-    base: {
-      fontSize: '12px',
-      fontWeight: '500',
-      fontFamily: '"Inter", sans-serif'
-    },
-  },
-  errorTextStyles: {
-    base: {
-      fontSize: '12px',
-      fontWeight: '500',
-      color: "#f44336",
-      fontFamily: '"Inter", sans-serif'
-    },
-  },
-  labels: {
-    cardLabel: 'Número de Tarjeta Personalizado',
-    cvvLabel: 'Código de Seguridad',
-    expiryMonthLabel: 'Mes de Expiración',
-    expiryYearLabel: 'Año de Expiración'
-  },
-  placeholders: {
-    cardPlaceholder: '0000 0000 0000 0000',
-    cvvPlaceholder: '123',
-    expiryMonthPlaceholder: 'MM',
-    expiryYearPlaceholder: 'AA'
-  }
-}
+const { openpay_keys } = merchantData;
 
-const checkoutData = {
-  customer: {
-    firstName: "Juan",
-    lastName: "Hernández",
-    country: "Mexico",
-    address: "Av. Revolución 356, Col. Roma",
-    city: "Monterrey",
-    state: "Nuevo León",
-    postCode: "64700",
-    email: "juan.hernandez@mail.com",
-    phone: "8187654321",
-  },
-  currency: 'mxn',
-  cart: {
-    total: 399,
-    items: [
-      {
-        description: "Black T-Shirt",
-        quantity: 1,
-        price_unit: 1,
-        discount: 0,
-        taxes: 0,
-        product_reference: 1,
-        name: "T-Shirt",
-        amount_total: 399,
-      },
-    ]
+const deviceSessionIdTonder = await liteCheckout.getOpenpayDeviceSessionID(
+  openpay_keys.merchant_id,
+  openpay_keys.public_key
+);
+```
+
+Return OpenPay device session id
+
+# Get customer authorization token
+
+```javascript
+const customerEmail = "john.c.calhoun@examplepetstore.com";
+
+const { auth_token } = await liteCheckout.customerRegister(customerEmail);
+```
+
+# Return customer data
+
+```typescript
+{
+    id: number,
+    email: string,
+    auth_token: string
+}
+```
+
+# Create order
+
+```typescript
+const cartItems = [
+  {
+    description: Test product description,
+    quantity: 1,
+    price_unit: 25,
+    discount: 0,
+    taxes: 12,
+    product_reference: 65421,
+    name: Test product,
+    amount_total: 25
   }
+]
+
+const { reference } = merchantData;
+
+const orderData = {
+  business: apiKeyTonder,
+  client: auth_token,
+  billing_address_id: null,
+  shipping_address_id: null,
+  amount: total,
+  status: A,
+  reference: reference,
+  is_oneclick: true,
+  items: cartItems,
 };
 
-const apiKey = "4c87c36e697e65ddfe288be0afbe7967ea0ab865";
-const returnUrl = "http://my-website:8080/checkout"
-const successUrl = "http://my-website:8080/sucess"
-// if using script tag, it should be initialized like this
-// new TonderSdk.InlineCheckout
-const inlineCheckout = new InlineCheckout({
-  apiKey,
-  returnUrl,
-  successUrl,
-  styles: customStyles
-});
-
-inlineCheckout.injectCheckout();
-
-const response = await inlineCheckout.payment(checkoutData);
+const jsonResponseOrder = await liteCheckout.createOrder(
+  orderData
+);
 ```
 
-## React Example
-```javascript
-```
-
-## Configuration
-| Property        | Type          | Description                                         |
-|:---------------:|:-------------:|:---------------------------------------------------:|
-| apiKey          | string        | You can take this from you Tonder Dashboard         |
-| backgroundColor | string        | Hex color #000000                                   |
-| returnUrl       | string        |                                                     |
-| successUrl      | string        |                                                     |
-| backgroundColor | string        |                                                     |
-
-## setPayment params
-### products
-It will receive an array of objects that represent the products.
-```javascript
-[
-    {
-        name: 'name of the product',
-        price_unit: 'valid float string with the price of the product',
-        quantity: 'valid integer strig with the quantity of this product',
+# Return order data
+```typescript
+{
+    id: number,
+    created: string,
+    amount: string,
+    status: string,
+    payment_method?: string,
+    reference?: string,
+    is_oneclick: boolean,
+    items: [
+        {
+            description: string,
+            product_reference: string,
+            quantity: string,
+            price_unit: string,
+            discount: string,
+            taxes: string,
+            amount_total: string
+        }
+    ],
+    billing_address?: string,
+    shipping_address?: string,
+    client: {
+        email: string,
+        name: string,
+        first_name: string,
+        last_name: string,
+        client_profile: {
+            gender: string,
+            date_birth?: string,
+            terms: boolean,
+            phone: string
+        }
     }
-]
+}
 ```
-### shippingCost
-It is a valid float string, that will be the shipping cost.
 
-### email
-The email of the customer that is making the purchase.
+# Create payment
+```javascript
+const now = new Date();
+const dateString = now.toISOString();
 
-### apiKey
-Your api key getted from Tonder Dashboard
+const paymentData = {
+  business_pk: business.pk,
+  amount: total,
+  date: dateString,
+  order: jsonResponseOrder.id,
+};
 
-### customer
-The data of the customer to be registered in the transaction
-
-### items
-An array of items to be registered in the Tonder order.
-
-### Mount element
-You need to have an element where the inline checkout will be mounted, this should be a DIV element with the ID "tonder-checkout"
-
-```html
-<div id="tonder-checkout"></div>
+const jsonResponsePayment = await liteCheckout.createPayment(
+  paymentData
+);
 ```
+
+# Return payment data
+```javascript
+{
+  pk: number,
+  order?: string,
+  amount: string,
+  status: string,
+  date: string,
+  paid_date?: string,
+  shipping_address: {
+    street: string,
+    number: string,
+    suburb: string,
+    city: {
+      name: string
+    },
+    state: {
+      name: string,
+      country: {
+          name: string
+      }
+    },
+    zip_code: string
+  },
+  shipping_address_id?: string,
+  billing_address: {
+    street: string,
+    number: string,
+    suburb: string,
+    city: {
+      name: string
+    },
+    state: {
+      name: string,
+      country: {
+        name: string
+      }
+    },
+    zip_code: string
+  },
+  billing_address_id?: string,
+  client?: string,
+  customer_order_reference?: string
+}
+```
+
+# Get skyflow payment form tokenized values
+
+The values of the variable skyflowTokens come from your html form
+
+```javascript
+
+const skyflowFields = {
+  card_number: this.paymentForm.value.cardNumber,
+  cvv: this.paymentForm.value.cvv,
+  expiration_month: this.paymentForm.value.month,
+  expiration_year: this.paymentForm.value.expirationYear,
+  cardholder_name: this.paymentForm.value.name
+}
+
+const { vault_id, vault_url } = merchantData;
+
+
+const skyflowTokens = await liteCheckout.getSkyflowTokens({
+  vault_id: vault_id,
+  vault_url: vault_url,
+  data: skyflowFields
+})
+
+```
+
+# Get checkout router data
+
+```javascript
+
+const customerPhone = "+11111111";
+const returnUrl = "http://localhost:8100/payment/success";
+
+const routerData = {
+  card: skyflowTokens,
+  name: skyflowTokens.cardholder_name,
+  last_name: "",
+  email_client: customerEmail,
+  phone_number: customerPhone,
+  return_url: returnUrl,
+  id_product: "no_id",
+  quantity_product: 1,
+  id_ship: "0",
+  instance_id_ship: "0",
+  amount: total,
+  title_ship: "shipping",
+  description: "Transaction from the lite SDK",
+  device_session_id: deviceSessionIdTonder,
+  token_id: "",
+  order_id: jsonResponseOrder.id,
+  business_id: business.pk,
+  payment_id: jsonResponsePayment.pk,
+  source: 'ionic-lite-sdk',
+};
+
+const jsonResponseRouter = await liteCheckout.startCheckoutRouter(
+  routerData
+);
+
+```
+
+# Return skyflow tokenized data
+```typescript
+{
+    vaultID: string,
+    responses: [
+        {
+            records: [
+                {
+                    skyflow_id: string
+                }
+            ]
+        },
+        {
+            fields: {
+                card_number: string,
+                cardholder_name: string,
+                cvv: string,
+                expiration_month: string,
+                expiration_year: string,
+                skyflow_id: string
+            }
+        }
+    ]
+}
+```
+
+# Return checkout router data
+
+```typescript
+{
+    status: 200,
+    message: Success,
+    psp_response: {
+        id: string,
+        authorization: number,
+        operation_type: string,
+        transaction_type: string,
+        status: string,
+        conciliated: boolean,
+        creation_date: string,
+        operation_date: string,
+        description: string,
+        error_message?: string,
+        order_id?: string,
+        card: {
+            type: string,
+            brand: string,
+            address?: string,
+            card_number: string,
+            holder_name: string,
+            expiration_year: string,
+            expiration_month: string,
+            allows_charges: boolean,
+            allows_payouts: boolean,
+            bank_name: string,
+            points_type: string,
+            points_card: boolean,
+            bank_code: number
+        },
+        customer_id: string,
+        gateway_card_present: string,
+        amount: number,
+        fee: {
+            amount: number,
+            tax: number,
+            currency: string
+        },
+        payment_method: {
+            type: string,
+            url: string
+        },
+        currency: string,
+        method: string,
+        object: string
+    },
+    transaction_status: string,
+    transaction_id: number,
+    payment_id: number,
+    provider: string,
+    next_action: {
+        redirect_to_url: {
+            url: string,
+            return_url: string,
+            verify_transaction_status_url: string
+        }
+    },
+    actions: [
+        {
+            name: string,
+            url: string,
+            method: string
+        }
+    ]
+}
+```
+
+Take actions on base to the checkout router response
+
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/)
