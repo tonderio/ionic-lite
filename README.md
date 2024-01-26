@@ -42,15 +42,17 @@ const liteCheckout = new LiteCheckout({
 |                 |               | Mock Server: https://stoplight.io/mocks/tonder/tonder-api-v1-2/3152148  |
 | apiKeyTonder    | string        | You can take this from you Tonder Dashboard                             |
 
-## Class methods
+# Class methods
 
-# Get business
+# Business
+
+## Get business
 
 ```javascript
 const merchantData = await liteCheckout.getBusiness();
 ```
 
-# Return business data
+## Return business data
 
 ```typescript
 {
@@ -87,7 +89,9 @@ const merchantData = await liteCheckout.getBusiness();
 }
 ```
 
-# Get OpenPay session id
+# OpenPay
+
+## Get OpenPay session id
 
 ```javascript
 const { openpay_keys } = merchantData;
@@ -100,7 +104,9 @@ const deviceSessionIdTonder = await liteCheckout.getOpenpayDeviceSessionID(
 
 Return OpenPay device session id
 
-# Get customer authorization token
+# Customer
+
+## Get customer authorization token
 
 ```javascript
 const customerEmail = "john.c.calhoun@examplepetstore.com";
@@ -108,7 +114,7 @@ const customerEmail = "john.c.calhoun@examplepetstore.com";
 const { auth_token } = await liteCheckout.customerRegister(customerEmail);
 ```
 
-# Return customer data
+## Return customer data
 
 ```typescript
 {
@@ -118,7 +124,9 @@ const { auth_token } = await liteCheckout.customerRegister(customerEmail);
 }
 ```
 
-# Create order
+# Order
+
+## Create order
 
 ```typescript
 const cartItems = [
@@ -153,7 +161,7 @@ const jsonResponseOrder = await liteCheckout.createOrder(
 );
 ```
 
-# Return order data
+## Return order data
 ```typescript
 {
     id: number,
@@ -191,7 +199,9 @@ const jsonResponseOrder = await liteCheckout.createOrder(
 }
 ```
 
-# Create payment
+# Payment
+
+## Create payment
 ```javascript
 const now = new Date();
 const dateString = now.toISOString();
@@ -208,7 +218,7 @@ const jsonResponsePayment = await liteCheckout.createPayment(
 );
 ```
 
-# Return payment data
+## Return payment data
 ```javascript
 {
   pk: number,
@@ -254,7 +264,9 @@ const jsonResponsePayment = await liteCheckout.createPayment(
 }
 ```
 
-# Get skyflow payment form tokenized values
+# Skyflow tokens
+
+## Get skyflow payment form tokenized values
 
 The values of the variable skyflowTokens come from your html form
 
@@ -279,7 +291,35 @@ const skyflowTokens = await liteCheckout.getSkyflowTokens({
 
 ```
 
-# Get checkout router data
+## Return skyflow tokenized data
+```typescript
+{
+    vaultID: string,
+    responses: [
+        {
+            records: [
+                {
+                    skyflow_id: string
+                }
+            ]
+        },
+        {
+            fields: {
+                card_number: string,
+                cardholder_name: string,
+                cvv: string,
+                expiration_month: string,
+                expiration_year: string,
+                skyflow_id: string
+            }
+        }
+    ]
+}
+```
+
+# Checkout router
+
+## Get checkout router data
 
 ```javascript
 
@@ -314,33 +354,7 @@ const jsonResponseRouter = await liteCheckout.startCheckoutRouter(
 
 ```
 
-# Return skyflow tokenized data
-```typescript
-{
-    vaultID: string,
-    responses: [
-        {
-            records: [
-                {
-                    skyflow_id: string
-                }
-            ]
-        },
-        {
-            fields: {
-                card_number: string,
-                cardholder_name: string,
-                cvv: string,
-                expiration_month: string,
-                expiration_year: string,
-                skyflow_id: string
-            }
-        }
-    ]
-}
-```
-
-# Return checkout router data
+## Return checkout router data
 
 ```typescript
 {
