@@ -206,6 +206,20 @@ export class LiteCheckout {
     }
   }
 
+  async getCustomerCards (customerToken: string, query: string) {
+    const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/${query}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Token ${customerToken}`
+      },
+      signal: this.signal,
+    });
+
+    const jsonResponse = await response.json();
+    console.log("jsonResponse: ", jsonResponse);
+    return jsonResponse;
+  }
+
 }
 
 
