@@ -5,36 +5,36 @@ import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
 import { constructorFields } from "../utils/defaultMock";
 import { OrderResponseClass, OrderItemClass } from "../utils/mockClasses";
 
-  declare global {
-      interface Window {
-          OpenPay: any;
-          Skyflow: any;
-      }
-  }
-  
-  describe("createOrder", () => {
-      let checkoutConstructor: LiteCheckoutConstructor,
-          liteCheckout: LiteCheckout,
-          fetchSpy: jest.SpyInstance,
-          liteCheckoutSpy: jest.SpyInstance;
-  
-      beforeEach(async () => {
-          window.fetch = jest.fn();
-  
-          checkoutConstructor = {
-              ...constructorFields,
-          };
-  
-          liteCheckout = new LiteCheckout(constructorFields);
-  
-          fetchSpy = jest.spyOn(global, "fetch");
-      });
-  
-      afterEach(() => {
-          jest.restoreAllMocks();
-      });
-  
-  it("createOrder success", async () => {
+declare global {
+    interface Window {
+        OpenPay: any;
+        Skyflow: any;
+    }
+}
+
+describe("createOrder", () => {
+    let checkoutConstructor: LiteCheckoutConstructor,
+        liteCheckout: LiteCheckout,
+        fetchSpy: jest.SpyInstance,
+        liteCheckoutSpy: jest.SpyInstance;
+
+    beforeEach(async () => {
+        window.fetch = jest.fn();
+
+        checkoutConstructor = {
+            ...constructorFields,
+        };
+
+        liteCheckout = new LiteCheckout(constructorFields);
+
+        fetchSpy = jest.spyOn(global, "fetch");
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it("createOrder success", async () => {
         liteCheckoutSpy = jest.spyOn(liteCheckout, "createOrder");
 
         fetchSpy.mockImplementation(() =>
