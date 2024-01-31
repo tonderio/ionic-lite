@@ -2,6 +2,8 @@ import { Business, CreateOrderResponse, CreatePaymentRequest, CreatePaymentRespo
 import { TokensRequest } from "../types/skyflow";
 import Skyflow from "skyflow-js";
 import { ErrorResponse, IErrorResponse } from "./ErrorResponse";
+import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
+import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
 
 declare global {
   interface Window {
@@ -30,28 +32,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     this.apiKeyTonder = apiKeyTonder;
   }
 
-  buildErrorResponseFromCatch(e: any): ErrorResponse {
-    return new ErrorResponse({
-      code: undefined,
-      body: undefined,
-      name: typeof e == "string" ? "catch" : (e as Error).name,
-      message: typeof e == "string" ? e : (e as Error).message,
-      stack: typeof e == "string" ? undefined : (e as Error).stack,
-    })
-  }
 
-  async buildErrorResponse(
-    response: Response,
-    stack: string | undefined = undefined
-  ): Promise<ErrorResponse> {
-    return new ErrorResponse({
-      code: response.status?.toString?.(),
-      body: await response?.json?.(),
-      name: response.status?.toString?.(),
-      message: await response?.text?.(),
-      stack,
-    } as IErrorResponse);
-  }
 
   async getOpenpayDeviceSessionID(
     merchant_id: string,
@@ -172,7 +153,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     vault_id,
     vault_url,
     data,
-  }: TokensRequest): Promise<any> {
+  }: TokensRequest): Promise<any | ErrorResponse> {
     const skyflow = Skyflow.init({
       vaultID: vault_id,
       vaultURL: vault_url,
@@ -183,53 +164,25 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       },
     });
 
-    const collectContainer: any = skyflow.container(
+    const collectContainer: CollectContainer = skyflow.container(
       Skyflow.ContainerType.COLLECT
-    );
+    ) as CollectContainer;
 
-    const fields = await Promise.all(
-      Object.keys(data).map(async (key) => {
-        const cardHolderNameElement = await collectContainer.create({
-          table: "cards",
-          column: key,
-          type: Skyflow.ElementType.INPUT_FIELD,
-        });
-        return { element: cardHolderNameElement, key: key };
-      })
-    );
-
-    const fieldPromises: Promise<any>[] = fields.map((field) => {
-      return new Promise((resolve, reject) => {
-        const div = document.createElement("div");
-        div.hidden = true;
-        div.id = `id-${field.key}`;
-        document.querySelector(`body`)?.appendChild(div);
-        setTimeout(() => {
-          field.element.mount(`#id-${field.key}`);
-          setInterval(() => {
-            if (field.element.isMounted()) {
-              const value = data[field.key];
-              field.element.update({ value: value });
-              return resolve(field.element.isMounted());
-            }
-          }, 120);
-        }, 120);
-      });
-    });
+    const fieldPromises = await this.getFieldsPromise(data, collectContainer);
 
     const result = await Promise.all(fieldPromises);
 
-    const mountFail = result.find((item: boolean) => !item);
+    const mountFail = result.some((item: boolean) => !item);
 
     if (mountFail) {
-      return { error: "Ocurrió un error al montar los campos de la tarjeta" };
+      return this.buildErrorResponseFromCatch(Error("Ocurrió un error al montar los campos de la tarjeta"));
     } else {
       try {
-        const collectResponseSkyflowTonder = await collectContainer.collect();
-        return collectResponseSkyflowTonder["records"][0]["fields"];
+        const collectResponseSkyflowTonder = await collectContainer.collect() as any;
+        if (collectResponseSkyflowTonder) return collectResponseSkyflowTonder["records"][0]["fields"];
+        return this.buildErrorResponseFromCatch(Error("Por favor, verifica todos los campos de tu tarjeta"))
       } catch (error) {
-        console.error("Por favor, verifica todos los campos de tu tarjeta");
-        return { error: "Por favor, verifica todos los campos de tu tarjeta" };
+        return this.buildErrorResponseFromCatch(error);
       }
     }
   }
@@ -248,5 +201,65 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     } catch (e) {
       throw new Error(`Failed to retrieve bearer token; ${typeof e == "string" ? e : (e as Error).message}`)
     }
+  }
+
+  async getFieldsPromise(data: any, collectContainer: CollectContainer): Promise<Promise<boolean>[]> {
+    const fields = await this.getFields(data, collectContainer);
+    if (!fields) return [];
+
+    return fields.map((field: { element: CollectElement, key: string }) => {
+      return new Promise((resolve) => {
+        const div = document.createElement("div");
+        div.hidden = true;
+        div.id = `id-${field.key}`;
+        document.querySelector(`body`)?.appendChild(div);
+        setTimeout(() => {
+          field.element.mount(`#id-${field.key}`);
+          setInterval(() => {
+            if (field.element.isMounted()) {
+              const value = data[field.key];
+              field.element.update({ value: value });
+              return resolve(field.element.isMounted());
+            }
+          }, 120);
+        }, 120);
+      });
+    })
+  }
+
+  private buildErrorResponseFromCatch(e: any): ErrorResponse {
+    return new ErrorResponse({
+      code: undefined,
+      body: undefined,
+      name: typeof e == "string" ? "catch" : (e as Error).name,
+      message: typeof e == "string" ? e : (e as Error).message,
+      stack: typeof e == "string" ? undefined : (e as Error).stack,
+    })
+  }
+
+  private async buildErrorResponse(
+    response: Response,
+    stack: string | undefined = undefined
+  ): Promise<ErrorResponse> {
+    return new ErrorResponse({
+      code: response.status?.toString?.(),
+      body: await response?.json?.(),
+      name: response.status?.toString?.(),
+      message: await response?.text?.(),
+      stack,
+    } as IErrorResponse);
+  }
+
+  private async getFields(data: any, collectContainer: CollectContainer): Promise<{ element: CollectElement, key: string }[]> {
+    return await Promise.all(
+      Object.keys(data).map(async (key) => {
+        const cardHolderNameElement = await collectContainer.create({
+          table: "cards",
+          column: key,
+          type: Skyflow.ElementType.INPUT_FIELD,
+        });
+        return { element: cardHolderNameElement, key: key };
+      })
+    )
   }
 }

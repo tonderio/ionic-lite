@@ -1,10 +1,15 @@
 jest.setMock("skyflow-js", {
     OpenPay: jest.fn(),
-    init: jest.fn().mockImplementation(() => ({ container: () => jest.fn() })),
+    init: jest.fn().mockImplementation(() => ({
+        container: () => ({
+            collect: () => ({
+                records: [{ fields: "1234" }],
+            }),
+        }),
+    })),
     LogLevel: { ERROR: "ERROR" },
     Env: { DEV: "DEV" },
     ContainerType: { COLLECT: "COLLECT" },
-    container: () => jest.fn(),
 });
 
 import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
@@ -21,6 +26,7 @@ import {
 } from "../../src/types/commons";
 import { ErrorResponse, IErrorResponse } from "../../src/classes/ErrorResponse";
 import { TokensRequest } from "../../src/types/skyflow";
+import Skyflow from "skyflow-js";
 
 declare global {
     interface Window {
@@ -748,14 +754,17 @@ describe("LiteCheckout", () => {
     });
 
     it("getSkyflowTokens success", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
+        liteCheckout.getVaultToken = jest
+            .fn()
+            .mockImplementation(() => Promise.resolve("1234"));
 
-        fetchSpy.mockImplementation(() =>
-            Promise.resolve({
-                json: () => Promise.resolve({ token: "1234" }),
-                ok: true,
-            })
-        );
+        liteCheckout.getFieldsPromise = jest
+            .fn()
+            .mockImplementation(() =>
+                Promise.resolve(new Array(5).fill(Promise.resolve(true)))
+            );
+
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
 
         const response = await liteCheckout.getSkyflowTokens({
             ...new TokensRequestClass(),
@@ -765,56 +774,80 @@ describe("LiteCheckout", () => {
     });
 
     it("getSkyflowTokens empty", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
+        liteCheckout.getVaultToken = jest
+            .fn()
+            .mockImplementation(() => Promise.resolve(""));
 
-        fetchSpy.mockImplementation(() =>
-            Promise.resolve({
-                json: () => Promise.resolve(),
-                ok: true,
-            })
-        );
+        jest.spyOn(Skyflow, "init").mockImplementation(jest.fn().mockImplementation(() => ({
+            container: () => ({
+                collect: jest.fn().mockResolvedValue(""),
+            }),
+        })));
+
+        liteCheckout.getFieldsPromise = jest
+            .fn()
+            .mockImplementation(() =>
+                Promise.resolve(new Array(5).fill(Promise.resolve(true)))
+            );
+
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
 
         const response = await liteCheckout.getSkyflowTokens({
             ...new TokensRequestClass(),
-        });
-        expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(liteCheckoutSpy).toHaveReturned();
-        expect(response).toBeUndefined();
-    });
-
-    it("getSkyflowTokens errorResponse", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
-
-        fetchSpy.mockImplementation(() =>
-            Promise.resolve({
-                json: () => Promise.resolve(),
-                ok: false,
-                status: 400,
-            })
-        );
-
-        const response = (await liteCheckout.getSkyflowTokens({
-            ...new TokensRequestClass(),
-        })) as IErrorResponse;
-        expect(response.code).toStrictEqual("400");
+        }) as IErrorResponse;
         expect(response).toBeInstanceOf(ErrorResponse);
+        expect(response.message).toStrictEqual("Por favor, verifica todos los campos de tu tarjeta");
     });
 
-    it("getSkyflowTokens errorCatch", async () => {
+    it("getSkyflowTokens error mount fields", async () => {
+        liteCheckout.getVaultToken = jest
+            .fn()
+            .mockImplementation(() => Promise.resolve(""));
+
+        jest.spyOn(Skyflow, "init").mockImplementation(jest.fn().mockImplementation(() => ({
+            container: () => ({
+                collect: jest.fn().mockResolvedValue(""),
+            }),
+        })));
+
+        liteCheckout.getFieldsPromise = jest
+            .fn()
+            .mockImplementation(() =>
+              new Array(5).fill(false)
+            );
+
         liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
 
-        jest
-            .spyOn(liteCheckout, "getVaultToken")
+        const response = await liteCheckout.getSkyflowTokens({
+            ...new TokensRequestClass(),
+        }) as IErrorResponse;
+        expect(response).toBeInstanceOf(ErrorResponse);
+        expect(response.message).toStrictEqual("Ocurrió un error al montar los campos de la tarjeta");
+    });
+
+    it("getSkyflowTokens error collect catch", async () => {
+        liteCheckout.getVaultToken = jest
+            .fn()
             .mockImplementation(() => Promise.resolve("1234"));
 
-        fetchSpy.mockRejectedValue("error");
+        jest.spyOn(Skyflow, "init").mockImplementation(jest.fn().mockImplementation(() => ({
+            container: () => ({
+                collect: jest.fn().mockRejectedValue("error"),
+            }),
+        })));
+
+        liteCheckout.getFieldsPromise = jest
+            .fn()
+            .mockImplementation(() =>
+                Promise.resolve(new Array(5).fill(Promise.resolve(true)))
+            );
+
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
 
         const response = (await liteCheckout.getSkyflowTokens({
             ...new TokensRequestClass(),
         })) as IErrorResponse;
-        expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(response.message).toStrictEqual("error");
-        expect(response.name).toStrictEqual("catch");
-        expect(liteCheckoutSpy).rejects.toThrow();
+        expect(response).toBeInstanceOf(ErrorResponse);
     });
 });
