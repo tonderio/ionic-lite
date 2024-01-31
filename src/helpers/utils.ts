@@ -26,12 +26,12 @@ export const createObserver = ({ target }: { target: string }): Promise<any> => 
     // Start observing the target node for configured mutations
     observer.observe(targetNode, config);
 
-    window.setTimeout(()=>{
+    window.setTimeout(() => {
       if (!hasChanged) {
         reject("Mounting error");
       }
     }, 5000);
-    
+
   })
 
 } 

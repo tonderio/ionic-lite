@@ -23,8 +23,8 @@ export type VaultRequest = {
 }
 
 export type TokensRequest = {
-    vault_id: string, 
-    vault_url: string, 
+    vault_id: string,
+    vault_url: string,
     data: {
         [key: string]: any;
     }

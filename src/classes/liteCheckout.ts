@@ -1,7 +1,7 @@
 import { Business, CreateOrderResponse, CreatePaymentRequest, CreatePaymentResponse, CustomerRegisterResponse, GetVaultTokenResponse, OrderItem, StartCheckoutRequest, StartCheckoutResponse } from "../types/commons";
 import { TokensRequest } from "../types/skyflow";
 import Skyflow from "skyflow-js";
-import { ErrorResponse, IErrorResponse } from "./ErrorResponse";
+import { ErrorResponse, IErrorResponse } from "./errorResponse";
 import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
 import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
 
