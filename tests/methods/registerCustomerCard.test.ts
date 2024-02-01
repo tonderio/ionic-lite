@@ -1,10 +1,10 @@
 import "../utils/defaultMock";
 import { LiteCheckout } from "../../src";
-import { ErrorResponse } from "../../src/classes/errorResponse";
 import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
-import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
-import { BusinessClass } from "../utils/mockClasses";
+import { RegisterCustomerCardRequestClass, RegisterCustomerCardResponseClass } from "../utils/mockClasses";
+import { ErrorResponse } from "../../src/classes/errorResponse";
+import { IErrorResponse } from "../../src/types/responses";
 
 declare global {
     interface Window {
@@ -13,7 +13,7 @@ declare global {
     }
 }
 
-describe("getBusiness", () => {
+describe("registerCustomerCard", () => {
     let checkoutConstructor: LiteCheckoutConstructor,
         liteCheckout: LiteCheckout,
         fetchSpy: jest.SpyInstance,
@@ -35,27 +35,28 @@ describe("getBusiness", () => {
         jest.restoreAllMocks();
     });
 
-    it("getBusiness success", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getBusiness");
+    it("registerCustomerCard success", async () => {
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "registerCustomerCard");
 
         fetchSpy.mockImplementation(() =>
             Promise.resolve({
                 json: () =>
                     Promise.resolve({
-                        ...new BusinessClass(),
+                        ...new RegisterCustomerCardResponseClass(),
                     }),
                 ok: true,
             })
         );
 
-        const response = await liteCheckout.getBusiness();
+        const response = await liteCheckout.registerCustomerCard("1234", { ...new RegisterCustomerCardRequestClass() });
 
-        expect(response).toStrictEqual({ ...new BusinessClass() });
+        expect(response).toStrictEqual({ ...new RegisterCustomerCardResponseClass() });
         expect(liteCheckoutSpy).toHaveBeenCalled();
+        expect(liteCheckoutSpy).toHaveBeenCalledWith("1234", { ...new RegisterCustomerCardRequestClass() });
     });
 
-    it("getBusiness empty", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getBusiness");
+    it("registerCustomerCard empty", async () => {
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "registerCustomerCard");
 
         fetchSpy.mockImplementation(() =>
             Promise.resolve({
@@ -64,14 +65,14 @@ describe("getBusiness", () => {
             })
         );
 
-        const response = await liteCheckout.getBusiness();
+        const response = await liteCheckout.registerCustomerCard("1234", { ...new RegisterCustomerCardRequestClass() });
         expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(liteCheckoutSpy).toHaveReturned();
         expect(response).toBeUndefined();
     });
 
-    it("getBusiness errorResponse", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getBusiness");
+    it("registerCustomerCard errorResponse", async () => {
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "registerCustomerCard");
 
         fetchSpy.mockImplementation(() =>
             Promise.resolve({
@@ -81,22 +82,24 @@ describe("getBusiness", () => {
             })
         );
 
-        const response = (await liteCheckout.getBusiness()) as IErrorResponse;
+        const response = (await liteCheckout.registerCustomerCard(
+            "1234", { ...new RegisterCustomerCardRequestClass() }
+        )) as IErrorResponse;
         expect(response.code).toStrictEqual("400");
         expect(response).toBeInstanceOf(ErrorResponse);
     });
 
-    it("getBusiness errorCatch", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getBusiness");
+    it("registerCustomerCard errorCatch", async () => {
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "registerCustomerCard");
 
         fetchSpy.mockRejectedValue("error");
 
-        const response = (await liteCheckout.getBusiness()) as ErrorResponse;
+        const response = (await liteCheckout.registerCustomerCard(
+            "1234", { ...new RegisterCustomerCardRequestClass() }
+        )) as IErrorResponse;
         expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(response.message).toStrictEqual("error");
         expect(response.name).toStrictEqual("catch");
         expect(liteCheckoutSpy).rejects.toThrow();
     });
 });
-
-

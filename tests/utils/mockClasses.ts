@@ -1,13 +1,18 @@
+import { Business, OrderItem } from "../../src/types/commons";
 import {
-    Business,
-    OrderItem,
-    CreateOrderResponse,
     CreatePaymentRequest,
-    CreatePaymentResponse,
+    RegisterCustomerCardRequest,
     StartCheckoutRequest,
+    TokensRequest,
+} from "../../src/types/requests";
+import {
+    CreateOrderResponse,
+    CreatePaymentResponse,
+    GetBusinessResponse,
+    GetCustomerCardsResponse,
+    RegisterCustomerCardResponse,
     StartCheckoutResponse,
-} from "../../src/types/commons";
-import { TokensRequest } from "../../src/types/skyflow";
+} from "../../src/types/responses";
 
 export class BusinessClass implements Business {
     business!: {
@@ -30,6 +35,34 @@ export class BusinessClass implements Business {
     vault_url!: string;
     reference!: number;
     is_installments_available!: boolean;
+
+    get mockObject(): GetBusinessResponse {
+        return {
+            business: {
+                pk: 1234,  // Número de ejemplo
+                name: 'Mock Business Name',
+                categories: [
+                    { pk: 5678, name: 'Mock Category 1' },
+                    { pk: 9012, name: 'Mock Category 2' }
+                ],
+                web: 'https://www.mockbusiness.com',
+                logo: 'assets/images/mock-logo.png',
+                full_logo_url: 'https://www.mockbusiness.com/logo.png',
+                background_color: '#f5f5f5',
+                primary_color: '#007bff',
+                checkout_mode: true,
+                textCheckoutColor: '#333333',
+                textDetailsColor: '#666666',
+                checkout_logo: 'assets/images/checkout-logo.png',
+            },
+            vault_id: 'mock-vault-id-123',
+            vault_url: 'https://mock-vault.com',
+            reference: 987654,
+            is_installments_available: true,
+            openpay_keys: { merchant_id: "", public_key: "" },
+            fintoc_keys: { public_key: "" }
+        }
+    }
 }
 
 export class OrderItemClass implements OrderItem {
@@ -41,6 +74,20 @@ export class OrderItemClass implements OrderItem {
     product_reference!: number;
     name!: string;
     amount_total!: number;
+
+    get mockObject(): OrderItem {
+        return {
+            description: "string",
+            quantity: 0,
+            price_unit: 0,
+            discount: 0,
+            taxes: 0,
+            product_reference: 0,
+            name: "string",
+            amount_total: 0,
+        }
+
+    }
 }
 
 export class OrderResponseClass implements CreateOrderResponse {
@@ -76,10 +123,62 @@ export class OrderResponseClass implements CreateOrderResponse {
             phone: string;
         };
     };
+
+    get mockObject(): CreateOrderResponse {
+        return {
+            id: 12345,
+            created: '2024-02-01T10:42:00Z',
+            amount: '123.45',
+            status: 'APPROVED',
+            payment_method: 'CREDIT_CARD',
+            reference: 'PAYMENT_REF_12345',
+            is_oneclick: true,
+            items: [
+                {
+                    description: 'Mock Item 1',
+                    product_reference: 'PRD-123',
+                    quantity: '2',
+                    price_unit: '50.00',
+                    discount: '5.00',
+                    taxes: '10.90',
+                    amount_total: '105.90',
+                },
+                {
+                    description: 'Mock Item 2',
+                    product_reference: 'PRD-456',
+                    quantity: '1',
+                    price_unit: '73.45',
+                    discount: '0.00',
+                    taxes: '6.55',
+                    amount_total: '79.00',
+                },
+            ],
+            billing_address: 'Mock Street 123, Mock City',
+            shipping_address: 'Mock Avenue 456, Mock Town',
+            client: {
+                email: 'mockuser@example.com',
+                name: 'Mock User',
+                first_name: 'Mock',
+                last_name: 'User',
+                client_profile: {
+                    gender: 'M',
+                    date_birth: '1990-01-01',
+                    terms: true,
+                    phone: '+1234567890',
+                },
+            },
+        }
+    }
 }
 
 export class CreatePaymentRequestClass implements CreatePaymentRequest {
     business_pk!: string;
+
+    get mockObject(): CreatePaymentRequest {
+        return {
+            business_pk: "NNNNNNNNNN",
+        };
+    }
 }
 
 export class CreatePaymentResponseClass implements CreatePaymentResponse {
@@ -109,6 +208,37 @@ export class CreatePaymentResponseClass implements CreatePaymentResponse {
     billing_address_id?: string | undefined;
     client?: string | undefined;
     customer_order_reference?: string | undefined;
+
+    get mockObject(): CreatePaymentResponse {
+        return {
+            pk: 45678,
+            order: "ORDER-98765",
+            amount: "250.00",
+            status: "PENDING",
+            date: "2024-02-01T14:29:05Z",
+            paid_date: "",
+            shipping_address: {
+                street: "Mock Street 123",
+                number: "10",
+                suburb: "Mock Suburb",
+                city: { name: "Mock City" },
+                state: { name: "Mock State", country: { name: "Mock Country" } },
+                zip_code: "12345",
+            },
+            shipping_address_id: "",
+            billing_address: {
+                street: "Mock Street 456",
+                number: "20",
+                suburb: "Mock Suburb 2",
+                city: { name: "Mock City 2" },
+                state: { name: "Mock State 2", country: { name: "Mock Country 2" } },
+                zip_code: "54321",
+            },
+            billing_address_id: "",
+            client: "CLIENT-123",
+            customer_order_reference: "REF-ABC123",
+        };
+    }
 }
 
 export class StartCheckoutRequestClass implements StartCheckoutRequest {
@@ -131,6 +261,30 @@ export class StartCheckoutRequestClass implements StartCheckoutRequest {
     business_id: any;
     payment_id: any;
     source!: string;
+
+    get mockObject(): StartCheckoutRequest {
+        return {
+            card: " any",
+            name: " any",
+            last_name: " string",
+            email_client: " any",
+            phone_number: " any",
+            return_url: " string",
+            id_product: " string",
+            quantity_product: 0,
+            id_ship: " string",
+            instance_id_ship: " string",
+            amount: " any",
+            title_ship: " string",
+            description: " string",
+            device_session_id: " any",
+            token_id: " string",
+            order_id: " any",
+            business_id: " any",
+            payment_id: " any",
+            source: " string",
+        };
+    }
 }
 
 export class StartCheckoutResponseClass implements StartCheckoutResponse {
@@ -190,17 +344,159 @@ export class StartCheckoutResponseClass implements StartCheckoutResponse {
             verify_transaction_status_url: string;
         };
     };
-    actions!: [
-        {
-            name: string;
-            url: string;
-            method: string;
-        }
-    ];
+    actions!: {
+        name: string;
+        url: string;
+        method: string;
+    }[];
+
+    get mockObject(): StartCheckoutResponse {
+        return {
+            status: 200, // Representa un estado exitoso
+            message: "Payment processing initiated",
+            transaction_status: "PENDING",
+            transaction_id: 1234567890,
+            payment_id: 9876543210,
+            provider: "STRIPE",
+            next_action: {
+                redirect_to_url: {
+                    url: "https://www.mock-payment-provider.com/checkout",
+                    return_url: "https://your-app.com/payment-confirmation",
+                    verify_transaction_status_url:
+                        "https://api.mock-payment-provider.com/transactions/1234567890/status",
+                },
+            },
+            psp_response: {
+                id: " string",
+                authorization: 0,
+                operation_type: " string",
+                transaction_type: " string",
+                status: " string",
+                conciliated: false,
+                creation_date: " string",
+                operation_date: " string",
+                description: " string",
+                error_message: " string",
+                order_id: " string",
+                card: {
+                    type: " string",
+                    brand: " string",
+                    address: " string",
+                    card_number: " string",
+                    holder_name: " string",
+                    expiration_year: " string",
+                    expiration_month: " string",
+                    allows_charges: false,
+                    allows_payouts: false,
+                    bank_name: " string",
+                    points_type: " string",
+                    points_card: false,
+                    bank_code: 0,
+                },
+                customer_id: " string",
+                gateway_card_present: " string",
+                amount: 0,
+                fee: {
+                    amount: 0,
+                    tax: 0,
+                    currency: " string",
+                },
+                payment_method: {
+                    type: " string",
+                    url: " string",
+                },
+                currency: " string",
+                method: " string",
+                object: " string",
+            },
+            actions: [
+                {
+                    name: "Check status",
+                    url: "https://api.mock-payment-provider.com/transactions/1234567890/status",
+                    method: "GET",
+                },
+                {
+                    name: "Cancel payment",
+                    url: "https://api.mock-payment-provider.com/transactions/1234567890/cancel",
+                    method: "POST",
+                },
+            ],
+        };
+    }
 }
 
 export class TokensRequestClass implements TokensRequest {
     vault_id!: string;
     vault_url!: string;
     data: { [key: string]: any } = {};
+
+    get mockObject(): TokensRequest {
+        return {
+            vault_id: "string",
+            vault_url: "string",
+            data: {
+                fields: [],
+            },
+        };
+    }
+}
+
+export class RegisterCustomerCardResponseClass
+    implements RegisterCustomerCardResponse {
+    skyflow_id!: string;
+    user_id!: number;
+
+    get mockObject(): RegisterCustomerCardResponse {
+        return {
+            skyflow_id: "string",
+            user_id: 0,
+        };
+    }
+}
+
+export class RegisterCustomerCardRequestClass
+    implements RegisterCustomerCardRequest {
+    skyflow_id!: string;
+
+    get mockObject(): RegisterCustomerCardRequest {
+        return {
+            skyflow_id: "",
+        };
+    }
+}
+
+export class GetCustomerCardsResponseClass implements GetCustomerCardsResponse {
+    user_id!: number;
+    cards!: {
+        records: {
+            fields: {
+                card_number: string;
+                cardholder_name: string;
+                cvv: string;
+                expiration_month: string;
+                expiration_year: string;
+                skyflow_id: string;
+            };
+        }[];
+    };
+
+    get mockObject(): GetCustomerCardsResponse {
+        return {
+            user_id: 0,
+            cards: {
+                records: [
+                    {
+                        fields: {
+                            card_number: "string",
+                            cardholder_name: "string",
+                            cvv: "string",
+                            expiration_month: "string",
+                            expiration_year: "string",
+                            skyflow_id: "string",
+                        },
+                    },
+                ],
+            },
+        };
+    }
 }

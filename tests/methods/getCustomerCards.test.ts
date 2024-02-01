@@ -4,7 +4,7 @@ import { ErrorResponse } from "../../src/classes/errorResponse";
 import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
 import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
-import { BusinessClass } from "../utils/mockClasses";
+import { GetCustomerCardsResponseClass } from "../utils/mockClasses";
 
 declare global {
     interface Window {
@@ -13,7 +13,7 @@ declare global {
     }
 }
 
-describe("getBusiness", () => {
+describe("getCustomerCards", () => {
     let checkoutConstructor: LiteCheckoutConstructor,
         liteCheckout: LiteCheckout,
         fetchSpy: jest.SpyInstance,
@@ -35,27 +35,28 @@ describe("getBusiness", () => {
         jest.restoreAllMocks();
     });
 
-    it("getBusiness success", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getBusiness");
+    it("getCustomerCards success", async () => {
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "getCustomerCards");
 
         fetchSpy.mockImplementation(() =>
             Promise.resolve({
                 json: () =>
                     Promise.resolve({
-                        ...new BusinessClass(),
+                        ...new GetCustomerCardsResponseClass(),
                     }),
                 ok: true,
             })
         );
 
-        const response = await liteCheckout.getBusiness();
+        const response = await liteCheckout.getCustomerCards("1234", "1234");
 
-        expect(response).toStrictEqual({ ...new BusinessClass() });
+        expect(response).toStrictEqual({ ...new GetCustomerCardsResponseClass() });
         expect(liteCheckoutSpy).toHaveBeenCalled();
+        expect(liteCheckoutSpy).toHaveBeenCalledWith("1234", "1234");
     });
 
-    it("getBusiness empty", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getBusiness");
+    it("getCustomerCards empty", async () => {
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "getCustomerCards");
 
         fetchSpy.mockImplementation(() =>
             Promise.resolve({
@@ -64,14 +65,14 @@ describe("getBusiness", () => {
             })
         );
 
-        const response = await liteCheckout.getBusiness();
+        const response = await liteCheckout.getCustomerCards("1234", "1234");
         expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(liteCheckoutSpy).toHaveReturned();
         expect(response).toBeUndefined();
     });
 
-    it("getBusiness errorResponse", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getBusiness");
+    it("getCustomerCards errorResponse", async () => {
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "getCustomerCards");
 
         fetchSpy.mockImplementation(() =>
             Promise.resolve({
@@ -81,22 +82,24 @@ describe("getBusiness", () => {
             })
         );
 
-        const response = (await liteCheckout.getBusiness()) as IErrorResponse;
+        const response = (await liteCheckout.getCustomerCards(
+            "1234", "1234"
+        )) as IErrorResponse;
         expect(response.code).toStrictEqual("400");
         expect(response).toBeInstanceOf(ErrorResponse);
     });
 
-    it("getBusiness errorCatch", async () => {
-        liteCheckoutSpy = jest.spyOn(liteCheckout, "getBusiness");
+    it("getCustomerCards errorCatch", async () => {
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "getCustomerCards");
 
         fetchSpy.mockRejectedValue("error");
 
-        const response = (await liteCheckout.getBusiness()) as ErrorResponse;
+        const response = (await liteCheckout.getCustomerCards(
+            "1234", "1234"
+        )) as IErrorResponse;
         expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(response.message).toStrictEqual("error");
         expect(response.name).toStrictEqual("catch");
         expect(liteCheckoutSpy).rejects.toThrow();
     });
 });
-
-

@@ -426,6 +426,56 @@ const jsonResponseRouter = await liteCheckout.startCheckoutRouter(
 }
 ```
 
+# Customer Cards(Register)
+
+## Register customer card
+
+```typescript
+
+customerToken: string;
+
+data: {
+    skyflow_id: string;
+};
+
+const jsonResponseOrder = await liteCheckout.registerCustomerCard(
+  customerToken,
+  data
+);
+```
+
+## Return register customer card
+```typescript
+{
+    skyflow_id: string;
+    user_id: number;
+}
+```
+
+# Customer Cards(Get)
+
+## Get customer cards
+
+```typescript
+
+customerToken: string;
+
+query: string;
+
+const jsonResponseOrder = await liteCheckout.getCustomerCards(
+  customerToken,
+  query
+);
+```
+
+## Return get customer card
+```typescript
+{
+    skyflow_id: string;
+    user_id: number;
+}
+```
+
 Take actions on base to the checkout router response
 
 ## License

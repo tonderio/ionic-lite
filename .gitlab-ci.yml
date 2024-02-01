@@ -1,0 +1,13 @@
+image: grupoapok/awscli:18
+
+stages:
+  - test
+
+test:
+  stage: test 
+  only:
+    - development
+  before_script:
+    - npm install
+  script:
+    - npm run test

@@ -1,4 +1,4 @@
-type SkyflowRecord = {
+export type SkyflowRecord = {
     method: string;
     quorum?: boolean;
     tableName: string;
@@ -14,25 +14,4 @@ type SkyflowRecord = {
     tokens?: {
         [key: string]: string;
     }
-}
-
-export type VaultRequest = {
-    records: SkyflowRecord[],
-    continueOnError?: boolean,
-    byot?: "DISABLE" | "ENABLE" | "ENABLE_STRICT"
-}
-
-export type TokensRequest = {
-    vault_id: string,
-    vault_url: string,
-    data: {
-        [key: string]: any;
-    }
-}
-
-export type TokensResponse = {
-    vaultID: string,
-    responses: {
-        [key: string]: string;
-    }[]
 }

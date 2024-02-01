@@ -1,7 +1,8 @@
 import "../utils/defaultMock";
 import { LiteCheckout } from "../../src";
-import { IErrorResponse, ErrorResponse } from "../../src/classes/errorResponse";
+import { ErrorResponse } from "../../src/classes/errorResponse";
 import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
+import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
 import { StartCheckoutResponseClass, StartCheckoutRequestClass, CreatePaymentRequestClass } from "../utils/mockClasses";
 
