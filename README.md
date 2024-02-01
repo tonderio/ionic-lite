@@ -102,7 +102,9 @@ const deviceSessionIdTonder = await liteCheckout.getOpenpayDeviceSessionID(
 );
 ```
 
-Return OpenPay device session id
+## Return OpenPay device session id
+
+string
 
 # Customer
 
