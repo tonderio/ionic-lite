@@ -1,7 +1,5 @@
-export interface IErrorResponse extends Error {
-    code?: string;
-    body?: string;
-}
+import { IErrorResponse } from "../types/responses";
+
 export class ErrorResponse implements IErrorResponse {
     code?: string | undefined;
     body?: string | undefined;

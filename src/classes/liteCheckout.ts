@@ -1,9 +1,10 @@
-import { Business, CreateOrderResponse, CreatePaymentRequest, CreatePaymentResponse, CustomerRegisterResponse, GetVaultTokenResponse, OrderItem, StartCheckoutRequest, StartCheckoutResponse } from "../types/commons";
-import { TokensRequest } from "../types/skyflow";
 import Skyflow from "skyflow-js";
-import { ErrorResponse, IErrorResponse } from "./errorResponse";
 import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
 import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
+import { Business } from "../types/commons";
+import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest } from "../types/requests";
+import { GetBusinessResponse, CustomerRegisterResponse, CreateOrderResponse, CreatePaymentResponse, StartCheckoutResponse, GetVaultTokenResponse, IErrorResponse, GetCustomerCardsResponse, RegisterCustomerCardResponse } from "../types/responses";
+import { ErrorResponse } from "./errorResponse";
 
 declare global {
   interface Window {
@@ -32,8 +33,6 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     this.apiKeyTonder = apiKeyTonder;
   }
 
-
-
   async getOpenpayDeviceSessionID(
     merchant_id: string,
     public_key: string
@@ -51,7 +50,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     }
   }
 
-  async getBusiness(): Promise<Business | ErrorResponse> {
+  async getBusiness(): Promise<GetBusinessResponse | ErrorResponse> {
     try {
       const getBusiness = await fetch(
         `${this.baseUrlTonder}/api/v1/payments/business/${this.apiKeyTonder}`,
@@ -92,7 +91,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     }
   }
 
-  async createOrder(orderItems: OrderItem): Promise<CreateOrderResponse[] | ErrorResponse> {
+  async createOrder(orderItems: CreateOrderRequest): Promise<CreateOrderResponse[] | ErrorResponse> {
     try {
       const url = `${this.baseUrlTonder}/api/v1/orders/`;
       const data = orderItems;
@@ -227,7 +226,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     })
   }
 
-  async registerCustomerCard (customerToken: string, data: { skyflow_id: string }) {
+  async registerCustomerCard(customerToken: string, data: RegisterCustomerCardRequest): Promise<RegisterCustomerCardResponse | ErrorResponse> {
     try {
       const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/`, {
         method: 'POST',
@@ -239,14 +238,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         body: JSON.stringify(data)
       });
 
-      const jsonResponse = await response.json();
-      return jsonResponse;
+      if (response.ok) return await response.json() as RegisterCustomerCardResponse;
+      return await this.buildErrorResponse(response);
     } catch (error) {
       return this.buildErrorResponseFromCatch(error);
     }
   }
 
-  async getCustomerCards (customerToken: string, query: string = "") {
+  async getCustomerCards(customerToken: string, query: string = ""): Promise<GetCustomerCardsResponse | ErrorResponse> {
     try {
       const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/${query}`, {
         method: 'GET',
@@ -257,8 +256,8 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         signal: this.signal,
       });
 
-      const jsonResponse = await response.json();
-      return jsonResponse;
+      if (response.ok) return await response.json() as GetCustomerCardsResponse;
+      return await this.buildErrorResponse(response);
     } catch (error) {
       return this.buildErrorResponseFromCatch(error);
     }
