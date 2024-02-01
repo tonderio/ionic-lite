@@ -227,18 +227,41 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     })
   }
 
-  async getCustomerCards (customerToken: string, query: string) {
-    const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/${query}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Token ${customerToken}`
-      },
-      signal: this.signal,
-    });
+  async registerCustomerCard (customerToken: string, data: { skyflow_id: string }) {
+    try {
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${customerToken}`,
+          'Content-Type': 'application/json'
+        },
+        signal: this.signal,
+        body: JSON.stringify(data)
+      });
 
-    const jsonResponse = await response.json();
-    console.log("jsonResponse: ", jsonResponse);
-    return jsonResponse;
+      const jsonResponse = await response.json();
+      return jsonResponse;
+    } catch (error) {
+      return this.buildErrorResponseFromCatch(error);
+    }
+  }
+
+  async getCustomerCards (customerToken: string, query: string = "") {
+    try {
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/${query}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Token ${customerToken}`,
+          'Content-Type': 'application/json'
+        },
+        signal: this.signal,
+      });
+
+      const jsonResponse = await response.json();
+      return jsonResponse;
+    } catch (error) {
+      return this.buildErrorResponseFromCatch(error);
+    }
   }
 
   private buildErrorResponseFromCatch(e: any): ErrorResponse {

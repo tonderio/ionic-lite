@@ -1,5 +1,5 @@
 const typescript = require('@rollup/plugin-typescript');
-const terser = require('@rollup/plugin-terser');;
+const terser = require('@rollup/plugin-terser');
 
 module.exports = {
   input: './src/index.ts',
@@ -9,7 +9,9 @@ module.exports = {
     plugins: [terser()]
   },
   plugins: [
-    typescript()
+    typescript({
+      exclude: ["tests/**", "jest.config.ts"]
+    })
   ],
-  external: ["skyflow-js"]
+  external: ["skyflow-js", "crypto-js"]
 };
