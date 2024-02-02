@@ -12,13 +12,13 @@ export type GetVaultTokenResponse = {
 };
 
 export type CustomerRegisterResponse = {
-    id: number;
+    id: number | string;
     email: string;
     auth_token: string;
 };
 
 export type CreateOrderResponse = {
-    id: number;
+    id: number | string;
     created: string;
     amount: string;
     status: string;
@@ -51,7 +51,7 @@ export type CreateOrderResponse = {
 };
 
 export type CreatePaymentResponse = {
-    pk: number;
+    pk: number | string;
     order?: string;
     amount: string;
     status: string;

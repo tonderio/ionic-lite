@@ -4,7 +4,7 @@ import { ErrorResponse } from "../../src/classes/errorResponse";
 import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
 import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
-import { OrderResponseClass, OrderItemClass } from "../utils/mockClasses";
+import { OrderResponseClass, OrderClass } from "../utils/mockClasses";
 
 declare global {
     interface Window {
@@ -46,12 +46,12 @@ describe("createOrder", () => {
         );
 
         const response = await liteCheckout.createOrder({
-            ...new OrderItemClass(),
+            ...new OrderClass(),
         });
 
         expect(response).toStrictEqual([{ ...new OrderResponseClass() }]);
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(liteCheckoutSpy).toHaveBeenCalledWith({ ...new OrderItemClass() });
+        expect(liteCheckoutSpy).toHaveBeenCalledWith({ ...new OrderClass() });
     });
 
     it("createOrder empty", async () => {
@@ -65,7 +65,7 @@ describe("createOrder", () => {
         );
 
         const response = await liteCheckout.createOrder({
-            ...new OrderItemClass(),
+            ...new OrderClass(),
         });
         expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(liteCheckoutSpy).toHaveReturned();
@@ -84,7 +84,7 @@ describe("createOrder", () => {
         );
 
         const response = (await liteCheckout.createOrder({
-            ...new OrderItemClass(),
+            ...new OrderClass(),
         })) as IErrorResponse;
         expect(response.code).toStrictEqual("400");
         expect(response).toBeInstanceOf(ErrorResponse);
@@ -96,7 +96,7 @@ describe("createOrder", () => {
         fetchSpy.mockRejectedValue("error");
 
         const response = (await liteCheckout.createOrder({
-            ...new OrderItemClass(),
+            ...new OrderClass(),
         })) as IErrorResponse;
         expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(response.message).toStrictEqual("error");

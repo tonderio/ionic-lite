@@ -1,5 +1,6 @@
 import { Business, OrderItem } from "../../src/types/commons";
 import {
+    CreateOrderRequest,
     CreatePaymentRequest,
     RegisterCustomerCardRequest,
     StartCheckoutRequest,
@@ -62,6 +63,35 @@ export class BusinessClass implements Business {
             openpay_keys: { merchant_id: "", public_key: "" },
             fintoc_keys: { public_key: "" }
         }
+    }
+}
+
+export class OrderClass implements CreateOrderRequest {
+    business!: string;
+    client!: string;
+    billing_address_id!: string;
+    shipping_address_id!: string;
+    amount!: number;
+    status!: string;
+    reference!: string;
+    is_oneclick!: boolean;
+    items!: OrderItem[];
+
+    get mockObject(): CreateOrderRequest {
+        return {
+            business: "The business pk",
+            client: "Client auth token",
+            billing_address_id: "The billing address",
+            shipping_address_id: "The shipping address",
+            amount: 25,
+            status: "PENDING",
+            reference: "XXXXXXX",
+            is_oneclick: false,
+            items: [
+                { ...new OrderItemClass() }
+            ]
+        }
+
     }
 }
 
@@ -173,10 +203,18 @@ export class OrderResponseClass implements CreateOrderResponse {
 
 export class CreatePaymentRequestClass implements CreatePaymentRequest {
     business_pk!: string;
+    amount!: number;
+    date!: string;
+    order!: string;
 
     get mockObject(): CreatePaymentRequest {
+        const now = new Date();
+        const dateString = now.toISOString();
         return {
             business_pk: "NNNNNNNNNN",
+            amount: 25,
+            date: dateString,
+            order: "XXXXX"
         };
     }
 }

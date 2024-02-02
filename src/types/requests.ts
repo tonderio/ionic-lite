@@ -1,10 +1,23 @@
 import { OrderItem } from "./commons";
 import { SkyflowRecord } from "./skyflow";
 
-export interface CreateOrderRequest extends OrderItem {}
+export interface CreateOrderRequest {
+    business: string,
+    client: string,
+    billing_address_id?: string | null,
+    shipping_address_id?: string | null,
+    amount: number,
+    status: string,
+    reference: string | number,
+    is_oneclick: boolean,
+    items: OrderItem[]
+}
 
 export type CreatePaymentRequest = {
-    business_pk: string;
+    business_pk: string | number,
+    amount: number,
+    date: string,
+    order: string | number
 }
 
 export type StartCheckoutRequest = {
@@ -13,7 +26,7 @@ export type StartCheckoutRequest = {
     last_name: string,
     email_client: any,
     phone_number: any,
-    return_url: string,
+    return_url?: string,
     id_product: string,
     quantity_product: number,
     id_ship: string,
