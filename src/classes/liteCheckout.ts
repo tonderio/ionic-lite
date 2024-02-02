@@ -91,7 +91,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     }
   }
 
-  async createOrder(orderItems: CreateOrderRequest): Promise<CreateOrderResponse[] | ErrorResponse> {
+  async createOrder(orderItems: CreateOrderRequest): Promise<CreateOrderResponse | ErrorResponse> {
     try {
       const url = `${this.baseUrlTonder}/api/v1/orders/`;
       const data = orderItems;
@@ -103,7 +103,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         },
         body: JSON.stringify(data),
       });
-      if (response.ok) return await response.json() as CreateOrderResponse[];
+      if (response.ok) return await response.json() as CreateOrderResponse;
       return await this.buildErrorResponse(response);
     } catch (e) {
       return this.buildErrorResponseFromCatch(e);
@@ -129,7 +129,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     }
   }
 
-  async startCheckoutRouter(routerData: StartCheckoutRequest): Promise<StartCheckoutResponse[] | ErrorResponse> {
+  async startCheckoutRouter(routerData: StartCheckoutRequest): Promise<StartCheckoutResponse | ErrorResponse> {
     try {
       const url = `${this.baseUrlTonder}/api/v1/checkout-router/`;
       const data = routerData;
@@ -141,7 +141,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         },
         body: JSON.stringify(data),
       });
-      if (response.ok) return await response.json() as StartCheckoutResponse[];
+      if (response.ok) return await response.json() as StartCheckoutResponse;
       return await this.buildErrorResponse(response);
     } catch (e) {
       return this.buildErrorResponseFromCatch(e);
