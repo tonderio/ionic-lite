@@ -133,13 +133,13 @@ const { auth_token } = await liteCheckout.customerRegister(customerEmail);
 ```typescript
 const cartItems = [
   {
-    description: Test product description,
+    description: "Test product description",
     quantity: 1,
     price_unit: 25,
     discount: 0,
     taxes: 12,
     product_reference: 65421,
-    name: Test product,
+    name: "Test product",
     amount_total: 25
   }
 ]
@@ -152,7 +152,7 @@ const orderData = {
   billing_address_id: null,
   shipping_address_id: null,
   amount: total,
-  status: A,
+  status: "A",
   reference: reference,
   is_oneclick: true,
   items: cartItems,
@@ -361,7 +361,7 @@ const jsonResponseRouter = await liteCheckout.startCheckoutRouter(
 ```typescript
 {
     status: 200,
-    message: Success,
+    message: "Success",
     psp_response: {
         id: string,
         authorization: number,
@@ -426,20 +426,22 @@ const jsonResponseRouter = await liteCheckout.startCheckoutRouter(
 }
 ```
 
+## Take actions on base to the checkout router response
+
 # Customer Cards(Register)
 
 ## Register customer card
 
 ```typescript
 
-customerToken: string;
+aut_token: string;
 
 data: {
     skyflow_id: string;
 };
 
 const jsonResponseOrder = await liteCheckout.registerCustomerCard(
-  customerToken,
+  aut_token,
   data
 );
 ```
@@ -458,12 +460,12 @@ const jsonResponseOrder = await liteCheckout.registerCustomerCard(
 
 ```typescript
 
-customerToken: string;
+aut_token: string;
 
-query: string;
+query: string = "?ordering=<string>&search=<string>";
 
 const jsonResponseOrder = await liteCheckout.getCustomerCards(
-  customerToken,
+  aut_token,
   query
 );
 ```
@@ -471,12 +473,23 @@ const jsonResponseOrder = await liteCheckout.getCustomerCards(
 ## Return get customer card
 ```typescript
 {
-    skyflow_id: string;
-    user_id: number;
+    user_id: number,
+    cards: {
+        records: [
+            {
+                fields: {
+                    card_number: string,
+                    cardholder_name: string,
+                    cvv: string,
+                    expiration_month: string,
+                    expiration_year: string,
+                    skyflow_id: string
+                }
+            }
+        ]
+    }
 }
 ```
-
-Take actions on base to the checkout router response
 
 ## License
 

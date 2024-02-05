@@ -2,6 +2,7 @@ image: grupoapok/awscli:18
 
 stages:
   - test
+  - deploy
 
 test:
   stage: test
@@ -11,3 +12,18 @@ test:
     - npm install
   script:
     - npm run test
+
+deploy:
+  stage: deploy
+  only:
+    - tags
+  before_script:
+    - |
+      {
+        echo "@tonder:registry=//registry.npmjs.org/"
+        echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}"
+      } | tee --append .npmrc
+  script:
+    - npm install
+    - npm run build
+    - npm publish
