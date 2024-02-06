@@ -1,6 +1,6 @@
 {
   "name": "@tonder.io/ionic-lite-sdk",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Tonder ionic lite SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,7 +16,8 @@
     "ts-node": "^10.9.2"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
     "@rollup/plugin-terser": "^0.4.4",
