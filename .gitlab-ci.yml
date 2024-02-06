@@ -20,7 +20,7 @@ deploy:
   before_script:
     - |
       {
-        echo "@tonder:registry=//registry.npmjs.org/"
+        echo "@tonder.io:registry=//registry.npmjs.org/"
         echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}"
       } | tee -a .npmrc
   script:
