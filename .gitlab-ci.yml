@@ -22,7 +22,7 @@ deploy:
       {
         echo "@tonder:registry=//registry.npmjs.org/"
         echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}"
-      } | tee --append .npmrc
+      } | tee -a .npmrc
   script:
     - npm install
     - npm run build
