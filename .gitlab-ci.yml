@@ -20,10 +20,10 @@ deploy:
   before_script:
     - |
       {
-        echo "@tonder.io:registry=//registry.npmjs.org/"
+        echo "@tonder.io:https://registry=//registry.npmjs.org/"
         echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}"
       } | tee -a .npmrc
   script:
     - npm install
     - npm run build
-    - npm publish
+    - npm publish --access=public
