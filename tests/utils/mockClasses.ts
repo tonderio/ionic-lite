@@ -506,35 +506,31 @@ export class RegisterCustomerCardRequestClass
 export class GetCustomerCardsResponseClass implements GetCustomerCardsResponse {
     user_id!: number;
     cards!: {
-        records: {
-            fields: {
-                card_number: string;
-                cardholder_name: string;
-                cvv: string;
-                expiration_month: string;
-                expiration_year: string;
-                skyflow_id: string;
-            };
-        }[];
-    };
+        fields: {
+            card_number: string;
+            cardholder_name: string;
+            cvv: string;
+            expiration_month: string;
+            expiration_year: string;
+            skyflow_id: string;
+        };
+    }[];
 
     get mockObject(): GetCustomerCardsResponse {
         return {
             user_id: 0,
-            cards: {
-                records: [
-                    {
-                        fields: {
-                            card_number: "string",
-                            cardholder_name: "string",
-                            cvv: "string",
-                            expiration_month: "string",
-                            expiration_year: "string",
-                            skyflow_id: "string",
-                        },
+            cards: [
+                {
+                    fields: {
+                        card_number: "string",
+                        cardholder_name: "string",
+                        cvv: "string",
+                        expiration_month: "string",
+                        expiration_year: "string",
+                        skyflow_id: "string",
                     },
-                ],
-            },
+                },
+            ],
         };
     }
 }
