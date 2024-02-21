@@ -168,6 +168,7 @@ export type GetCustomerCardsResponse = {
     user_id: number;
     cards: {
         fields: {
+            card_scheme: string;
             card_number: string;
             cardholder_name: string;
             cvv: string;
