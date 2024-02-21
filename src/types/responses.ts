@@ -167,17 +167,16 @@ export type TokensResponse = {
 export type GetCustomerCardsResponse = {
     user_id: number;
     cards: {
-        records: {
-            fields: {
-                card_number: string;
-                cardholder_name: string;
-                cvv: string;
-                expiration_month: string;
-                expiration_year: string;
-                skyflow_id: string;
-            };
-        }[];
-    };
+        fields: {
+            card_scheme: string;
+            card_number: string;
+            cardholder_name: string;
+            cvv: string;
+            expiration_month: string;
+            expiration_year: string;
+            skyflow_id: string;
+        };
+    }[];
 };
 
 export type RegisterCustomerCardResponse = {
