@@ -470,24 +470,22 @@ const jsonResponseOrder = await liteCheckout.getCustomerCards(
 );
 ```
 
-## Return get customer card
+## Return get customer cards
 ```typescript
 {
     user_id: number,
-    cards: {
-        records: [
-            {
-                fields: {
-                    card_number: string,
-                    cardholder_name: string,
-                    cvv: string,
-                    expiration_month: string,
-                    expiration_year: string,
-                    skyflow_id: string
-                }
+    cards: [
+        {
+            fields: {
+                card_number: string,
+                cardholder_name: string,
+                cvv: string,
+                expiration_month: string,
+                expiration_year: string,
+                skyflow_id: string
             }
-        ]
-    }
+        }
+    ]
 }
 ```
 
