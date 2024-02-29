@@ -31,7 +31,7 @@ import { LiteCheckout } from "@tonder/ionic-lite-sdk"
 const liteCheckout = new LiteCheckout({ 
   signal, 
   baseUrlTonder, 
-  apiKeyTonder 
+  apiKeyTonder
 })
 ```
 
@@ -41,6 +41,7 @@ const liteCheckout = new LiteCheckout({
 | baseUrlTonder   | string        | Live server: http://stage.tonder.io                                     |
 |                 |               | Mock Server: https://stoplight.io/mocks/tonder/tonder-api-v1-2/3152148  |
 | apiKeyTonder    | string        | You can take this from you Tonder Dashboard                             |
+|                 |               |                                                                         |
 
 # Class methods
 
@@ -98,7 +99,8 @@ const { openpay_keys } = merchantData;
 
 const deviceSessionIdTonder = await liteCheckout.getOpenpayDeviceSessionID(
   openpay_keys.merchant_id,
-  openpay_keys.public_key
+  openpay_keys.public_key,
+  is_sandbox: true
 );
 ```
 

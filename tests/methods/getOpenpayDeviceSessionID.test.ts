@@ -47,7 +47,7 @@ describe("getOpenpayDeviceSessionID", () => {
         };
 
         expect(
-            liteCheckout.getOpenpayDeviceSessionID("4321", "1234")
+            liteCheckout.getOpenpayDeviceSessionID("4321", "1234", true)
         ).resolves.toBe("test");
         expect(liteCheckoutSpy).toHaveBeenCalledWith("4321", "1234");
     });
@@ -65,7 +65,7 @@ describe("getOpenpayDeviceSessionID", () => {
         };
 
         expect(
-            liteCheckout.getOpenpayDeviceSessionID("", "")
+            liteCheckout.getOpenpayDeviceSessionID("", "", true)
         ).resolves.toBeUndefined();
         expect(liteCheckoutSpy).toHaveBeenCalledWith("", "");
     });
@@ -83,7 +83,7 @@ describe("getOpenpayDeviceSessionID", () => {
         };
 
         try {
-            await liteCheckout.getOpenpayDeviceSessionID("", "");
+            await liteCheckout.getOpenpayDeviceSessionID("", "", true);
         } catch (e) {
             const error: IErrorResponse = e as IErrorResponse;
             expect(liteCheckoutSpy).toHaveBeenCalledWith("", "");
