@@ -35,13 +35,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
   async getOpenpayDeviceSessionID(
     merchant_id: string,
-    public_key: string
+    public_key: string,
+    is_sandbox: boolean
   ): Promise<string | ErrorResponse> {
     try {
       let openpay = await window.OpenPay;
       openpay.setId(merchant_id);
       openpay.setApiKey(public_key);
-      openpay.setSandboxMode(true);
+      openpay.setSandboxMode(is_sandbox);
       return await openpay.deviceData.setup({
         signal: this.signal,
       }) as string;
