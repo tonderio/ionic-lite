@@ -49,7 +49,7 @@ describe("getOpenpayDeviceSessionID", () => {
         expect(
             liteCheckout.getOpenpayDeviceSessionID("4321", "1234", true)
         ).resolves.toBe("test");
-        expect(liteCheckoutSpy).toHaveBeenCalledWith("4321", "1234");
+        expect(liteCheckoutSpy).toHaveBeenCalledWith("4321", "1234", true);
     });
 
     it("getOpenpayDeviceSessionID empty", async () => {
@@ -67,7 +67,7 @@ describe("getOpenpayDeviceSessionID", () => {
         expect(
             liteCheckout.getOpenpayDeviceSessionID("", "", true)
         ).resolves.toBeUndefined();
-        expect(liteCheckoutSpy).toHaveBeenCalledWith("", "");
+        expect(liteCheckoutSpy).toHaveBeenCalledWith("", "", true);
     });
 
     it("getOpenpayDeviceSessionID error", async () => {
@@ -86,7 +86,7 @@ describe("getOpenpayDeviceSessionID", () => {
             await liteCheckout.getOpenpayDeviceSessionID("", "", true);
         } catch (e) {
             const error: IErrorResponse = e as IErrorResponse;
-            expect(liteCheckoutSpy).toHaveBeenCalledWith("", "");
+            expect(liteCheckoutSpy).toHaveBeenCalledWith("", "", true);
             expect(liteCheckoutSpy).toHaveReturned();
             expect(error.message).toStrictEqual("error");
             expect(error).toBeInstanceOf(ErrorResponse);
