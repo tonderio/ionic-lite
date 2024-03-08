@@ -436,14 +436,14 @@ const jsonResponseRouter = await liteCheckout.startCheckoutRouter(
 
 ```typescript
 
-aut_token: string;
+customer_auth_token: string;
 
 data: {
     skyflow_id: string;
 };
 
 const jsonResponseOrder = await liteCheckout.registerCustomerCard(
-  aut_token,
+  customer_auth_token,
   data
 );
 ```
@@ -462,12 +462,12 @@ const jsonResponseOrder = await liteCheckout.registerCustomerCard(
 
 ```typescript
 
-aut_token: string;
+customer_auth_token: string;
 
 query: string = "?ordering=<string>&search=<string>";
 
 const jsonResponseOrder = await liteCheckout.getCustomerCards(
-  aut_token,
+  customer_auth_token,
   query
 );
 ```
@@ -489,6 +489,17 @@ const jsonResponseOrder = await liteCheckout.getCustomerCards(
         }
     ]
 }
+```
+
+## Delete customer card
+
+```typescript
+
+const deleted: boolean = await liteCheckout.deleteCustomerCard(
+  customer_auth_token,
+  skyflow_id
+);
+
 ```
 
 ## License
