@@ -264,6 +264,24 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     }
   }
 
+  async deleteCustomerCard(customerToken: string, skyflowId: string = ""): Promise<Boolean | ErrorResponse> {
+    try {
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/${skyflowId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Token ${customerToken}`,
+          'Content-Type': 'application/json'
+        },
+        signal: this.signal,
+      });
+
+      if (response.ok) return true;
+      return await this.buildErrorResponse(response);
+    } catch (error) {
+      return this.buildErrorResponseFromCatch(error);
+    }
+  }
+
   private buildErrorResponseFromCatch(e: any): ErrorResponse {
     return new ErrorResponse({
       code: undefined,
