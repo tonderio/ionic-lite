@@ -4,20 +4,20 @@ import { SkyflowRecord } from "./skyflow";
 export interface CreateOrderRequest {
     business: string,
     client: string,
-    billing_address_id?: string | null,
-    shipping_address_id?: string | null,
+    billing_address_id?: number | null,
+    shipping_address_id?: number | null,
     amount: number,
-    status: string,
+    status?: string,
     reference: string | number,
     is_oneclick: boolean,
     items: OrderItem[]
 }
 
 export type CreatePaymentRequest = {
-    business_pk: string | number,
+    business_pk?: string | number,
     amount: number,
-    date: string,
-    order: string | number
+    date?: string,
+    order?: string | number
 }
 
 export type StartCheckoutRequest = {

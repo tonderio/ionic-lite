@@ -4,7 +4,7 @@ import { ErrorResponse } from "../../src/classes/errorResponse";
 import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
 import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
-import { BusinessClass } from "../utils/mockClasses";
+import { BusinessClass, CustomerRegisterClass } from "../utils/mockClasses";
 
 
 declare global {
@@ -43,7 +43,7 @@ describe("customerRegister", () => {
             Promise.resolve({
                 json: () =>
                     Promise.resolve({
-                        ...new BusinessClass(),
+                        ...new CustomerRegisterClass(),
                     }),
                 ok: true,
             })
@@ -51,7 +51,7 @@ describe("customerRegister", () => {
 
         const response = await liteCheckout.customerRegister("email@gmail.com");
 
-        expect(response).toStrictEqual({ ...new BusinessClass() });
+        expect(response).toStrictEqual({ ...new CustomerRegisterClass() });
         expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(liteCheckoutSpy).toHaveBeenCalledWith("email@gmail.com");
     });
