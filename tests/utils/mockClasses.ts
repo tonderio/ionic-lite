@@ -4,7 +4,7 @@ import {
     CreatePaymentRequest,
     RegisterCustomerCardRequest,
     StartCheckoutRequest,
-    TokensRequest,
+    TokensRequest
 } from "../../src/types/requests";
 import {
     CreateOrderResponse,
@@ -13,6 +13,7 @@ import {
     GetCustomerCardsResponse,
     RegisterCustomerCardResponse,
     StartCheckoutResponse,
+    CustomerRegisterResponse
 } from "../../src/types/responses";
 
 export class BusinessClass implements Business {
@@ -69,8 +70,8 @@ export class BusinessClass implements Business {
 export class OrderClass implements CreateOrderRequest {
     business!: string;
     client!: string;
-    billing_address_id!: string;
-    shipping_address_id!: string;
+    billing_address_id!: number | null;
+    shipping_address_id!: number | null;
     amount!: number;
     status!: string;
     reference!: string;
@@ -81,11 +82,40 @@ export class OrderClass implements CreateOrderRequest {
         return {
             business: "The business pk",
             client: "Client auth token",
-            billing_address_id: "The billing address",
-            shipping_address_id: "The shipping address",
+            billing_address_id: null,
+            shipping_address_id: null,
             amount: 25,
             status: "PENDING",
             reference: "XXXXXXX",
+            is_oneclick: false,
+            items: [
+                { ...new OrderItemClass() }
+            ]
+        }
+
+    }
+}
+
+export class OrderClassEmptyValues implements CreateOrderRequest {
+    business!: string;
+    client!: string;
+    billing_address_id!: number | null;
+    shipping_address_id!: number | null;
+    amount!: number;
+    status!: string;
+    reference!: string;
+    is_oneclick!: boolean;
+    items!: OrderItem[];
+
+    get mockObject(): CreateOrderRequest {
+        return {
+            business: "",
+            client: "Client auth token",
+            billing_address_id: 1,
+            shipping_address_id: 2,
+            amount: 25,
+            status: "PENDING",
+            reference: "",
             is_oneclick: false,
             items: [
                 { ...new OrderItemClass() }
@@ -533,6 +563,31 @@ export class GetCustomerCardsResponseClass implements GetCustomerCardsResponse {
                     },
                 },
             ],
+        };
+    }
+}
+
+export const OrderEmptyValuesResponse = {
+	"business": [
+		"This field may not be blank."
+	],
+	"reference": [
+		"This field may not be null."
+	]
+}
+
+export class CustomerRegisterClass implements CustomerRegisterResponse {
+    id!: number;
+	email!: string;
+	auth_token!: string;
+	first_name!: string;
+	last_name!: string;
+
+    get mockObject(): CustomerRegisterResponse {
+        return {
+            id: 10,
+            email: "email@gmail.com",
+            auth_token: "string"
         };
     }
 }

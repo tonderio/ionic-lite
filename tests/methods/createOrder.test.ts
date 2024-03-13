@@ -4,7 +4,7 @@ import { ErrorResponse } from "../../src/classes/errorResponse";
 import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
 import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
-import { OrderResponseClass, OrderClass } from "../utils/mockClasses";
+import { OrderResponseClass, OrderClass, OrderClassEmptyValues, OrderEmptyValuesResponse } from "../utils/mockClasses";
 
 declare global {
     interface Window {
@@ -88,6 +88,26 @@ describe("createOrder", () => {
         })) as IErrorResponse;
         expect(response.code).toStrictEqual("400");
         expect(response).toBeInstanceOf(ErrorResponse);
+    });
+
+    it("createOrder empty values", async () => {
+        liteCheckoutSpy = jest.spyOn(liteCheckout, "createOrder");
+
+        fetchSpy.mockImplementation(() =>
+            Promise.resolve({
+                json: () => Promise.resolve(OrderEmptyValuesResponse),
+                ok: false,
+                status: 400,
+            })
+        );
+
+        const response = (await liteCheckout.createOrder({
+            ...new OrderClassEmptyValues(),
+        })) as IErrorResponse;
+
+        expect(liteCheckoutSpy).toHaveBeenCalled();
+        expect(response.body).toStrictEqual(OrderEmptyValuesResponse);
+        expect(liteCheckoutSpy).rejects.toThrow();
     });
 
     it("createOrder errorCatch", async () => {
