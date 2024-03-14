@@ -17,7 +17,8 @@ export type CreatePaymentRequest = {
     business_pk?: string | number,
     amount: number,
     date?: string,
-    order?: string | number
+    order_id?: string | number
+    client_id?: string | number
 }
 
 export type StartCheckoutRequest = {
