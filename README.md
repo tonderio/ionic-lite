@@ -210,11 +210,14 @@ const jsonResponseOrder = await liteCheckout.createOrder(
 const now = new Date();
 const dateString = now.toISOString();
 
+const { id: customerId } = await liteCheckout.customerRegister(customerEmail);
+
 const paymentData = {
   business_pk: business.pk,
   amount: total,
   date: dateString,
-  order: jsonResponseOrder.id,
+  order_id: jsonResponseOrder.id,
+  client_id: customerId,
 };
 
 const jsonResponsePayment = await liteCheckout.createPayment(

@@ -235,7 +235,8 @@ export class CreatePaymentRequestClass implements CreatePaymentRequest {
     business_pk!: string;
     amount!: number;
     date!: string;
-    order!: string;
+    order_id!: string;
+    client_id!: number;
 
     get mockObject(): CreatePaymentRequest {
         const now = new Date();
@@ -244,7 +245,8 @@ export class CreatePaymentRequestClass implements CreatePaymentRequest {
             business_pk: "NNNNNNNNNN",
             amount: 25,
             date: dateString,
-            order: "XXXXX"
+            order_id: "XXXXX",
+            client_id: 1
         };
     }
 }
