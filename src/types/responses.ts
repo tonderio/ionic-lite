@@ -149,6 +149,9 @@ export type StartCheckoutResponse = {
             return_url: string;
             verify_transaction_status_url: string;
         };
+        iframe_resources?: {
+            iframe: string;
+        };
     };
     actions: {
         name: string;
