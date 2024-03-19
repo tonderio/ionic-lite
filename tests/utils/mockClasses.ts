@@ -331,6 +331,8 @@ export class StartCheckoutRequestClass implements StartCheckoutRequest {
     business_id: any;
     payment_id: any;
     source!: string;
+    currency!: string;
+    metadata!: string;
 
     get mockObject(): StartCheckoutRequest {
         return {
@@ -353,6 +355,8 @@ export class StartCheckoutRequestClass implements StartCheckoutRequest {
             business_id: " any",
             payment_id: " any",
             source: " string",
+            currency: "string",
+            metadata: "string"
         };
     }
 }
