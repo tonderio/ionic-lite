@@ -41,6 +41,9 @@ export type StartCheckoutRequest = {
     business_id: any,
     payment_id: any,
     source: string,
+    browser_info?: any,
+    metadata: any,
+    currency: string
 }
 
 export interface VaultRequest extends SkyflowRecord {
