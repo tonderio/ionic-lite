@@ -6,7 +6,7 @@ Tonder SDK Lite to integrate REST service
 
 You can install using NPM
 ```bash
-npm i @tonder/ionic-lite-sdk
+npm i @tonder.io/ionic-lite-sdk
 ```
 
 or using an script tag
@@ -23,7 +23,7 @@ Add dependencies to the root of the app (index.html)
 ## Usage
 ## Import LiteCheckout class
 ```javascript
-import { LiteCheckout } from "@tonder/ionic-lite-sdk"
+import { LiteCheckout } from "@tonder.io/ionic-lite-sdk"
 ```
 ## Create instance
 
@@ -353,6 +353,10 @@ const routerData = {
   business_id: business.pk,
   payment_id: jsonResponsePayment.pk,
   source: 'ionic-lite-sdk',
+  metadata: {
+    name: "xxxxx"
+  },
+  currency: "MXN"
 };
 
 const jsonResponseRouter = await liteCheckout.startCheckoutRouter(
