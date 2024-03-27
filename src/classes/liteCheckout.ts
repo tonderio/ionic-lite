@@ -65,9 +65,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
       if (getBusiness.ok) return (await getBusiness.json()) as Business;
 
-      return await this.buildErrorResponse(getBusiness);
+      throw await this.buildErrorResponse(getBusiness);
     } catch (e) {
-      return this.buildErrorResponseFromCatch(e);
+      throw this.buildErrorResponseFromCatch(e);
     }
   }
 
@@ -86,9 +86,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return await response.json() as CustomerRegisterResponse;
-      return await this.buildErrorResponse(response);
+      throw await this.buildErrorResponse(response);
     } catch (e) {
-      return this.buildErrorResponseFromCatch(e);
+      throw this.buildErrorResponseFromCatch(e);
     }
   }
 
@@ -105,9 +105,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         body: JSON.stringify(data),
       });
       if (response.ok) return await response.json() as CreateOrderResponse;
-      return await this.buildErrorResponse(response);
+      throw await this.buildErrorResponse(response);
     } catch (e) {
-      return this.buildErrorResponseFromCatch(e);
+      throw this.buildErrorResponseFromCatch(e);
     }
   }
 
@@ -124,9 +124,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         body: JSON.stringify(data),
       });
       if (response.ok) return await response.json() as CreatePaymentResponse;
-      return await this.buildErrorResponse(response);
+      throw await this.buildErrorResponse(response);
     } catch (e) {
-      return this.buildErrorResponseFromCatch(e);
+      throw this.buildErrorResponseFromCatch(e);
     }
   }
 
@@ -143,9 +143,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         body: JSON.stringify(data),
       });
       if (response.ok) return await response.json() as StartCheckoutResponse;
-      return await this.buildErrorResponse(response);
+      throw await this.buildErrorResponse(response);
     } catch (e) {
-      return this.buildErrorResponseFromCatch(e);
+      throw this.buildErrorResponseFromCatch(e);
     }
   }
 
@@ -175,14 +175,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     const mountFail = result.some((item: boolean) => !item);
 
     if (mountFail) {
-      return this.buildErrorResponseFromCatch(Error("Ocurrió un error al montar los campos de la tarjeta"));
+      throw this.buildErrorResponseFromCatch(Error("Ocurrió un error al montar los campos de la tarjeta"));
     } else {
       try {
         const collectResponseSkyflowTonder = await collectContainer.collect() as any;
         if (collectResponseSkyflowTonder) return collectResponseSkyflowTonder["records"][0]["fields"];
-        return this.buildErrorResponseFromCatch(Error("Por favor, verifica todos los campos de tu tarjeta"))
+        throw this.buildErrorResponseFromCatch(Error("Por favor, verifica todos los campos de tu tarjeta"))
       } catch (error) {
-        return this.buildErrorResponseFromCatch(error);
+        throw this.buildErrorResponseFromCatch(error);
       }
     }
   }
@@ -240,9 +240,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return await response.json() as RegisterCustomerCardResponse;
-      return await this.buildErrorResponse(response);
+      throw await this.buildErrorResponse(response);
     } catch (error) {
-      return this.buildErrorResponseFromCatch(error);
+      throw this.buildErrorResponseFromCatch(error);
     }
   }
 
@@ -258,9 +258,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return await response.json() as GetCustomerCardsResponse;
-      return await this.buildErrorResponse(response);
+      throw await this.buildErrorResponse(response);
     } catch (error) {
-      return this.buildErrorResponseFromCatch(error);
+      throw this.buildErrorResponseFromCatch(error);
     }
   }
 
@@ -276,33 +276,53 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return true;
-      return await this.buildErrorResponse(response);
+      throw await this.buildErrorResponse(response);
     } catch (error) {
-      return this.buildErrorResponseFromCatch(error);
+      throw this.buildErrorResponseFromCatch(error);
     }
   }
 
   private buildErrorResponseFromCatch(e: any): ErrorResponse {
-    return new ErrorResponse({
-      code: undefined,
-      body: undefined,
-      name: typeof e == "string" ? "catch" : (e as Error).name,
-      message: typeof e == "string" ? e : (e as Error).message,
+    
+    const error = new ErrorResponse({
+      code: e?.status ? e.status : e.code,
+      body: e?.body,
+      name: e ? typeof e == "string" ? "catch" : (e as Error).name : "Error",
+      message: e ? (typeof e == "string" ? e : (e as Error).message) : "Error",
       stack: typeof e == "string" ? undefined : (e as Error).stack,
     })
+
+    return error;
   }
 
   private async buildErrorResponse(
     response: Response,
     stack: string | undefined = undefined
   ): Promise<ErrorResponse> {
-    return new ErrorResponse({
-      code: response.status?.toString?.(),
-      body: await response?.json?.(),
-      name: response.status?.toString?.(),
-      message: await response?.text?.(),
+
+    let body, status, message = "Error";
+
+    if(response && "json" in response) {
+      body = await response?.json();
+    }
+
+    if(response && "status" in response) {
+      status = response.status.toString();
+    }
+
+    if(response && "text" in response) {
+      message = await response.text();
+    }
+
+    const error = new ErrorResponse({
+      code: status,
+      body: body,
+      name: status,
+      message: message,
       stack,
-    } as IErrorResponse);
+    } as IErrorResponse)
+    
+    return error;
   }
 
   private async getFields(data: any, collectContainer: CollectContainer): Promise<{ element: CollectElement, key: string }[]> {

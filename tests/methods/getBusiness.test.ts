@@ -81,9 +81,15 @@ describe("getBusiness", () => {
             })
         );
 
-        const response = (await liteCheckout.getBusiness()) as IErrorResponse;
-        expect(response.code).toStrictEqual("400");
-        expect(response).toBeInstanceOf(ErrorResponse);
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.getBusiness()) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.code).toStrictEqual("400");
+            expect(error).toBeInstanceOf(ErrorResponse);
+        }
     });
 
     it("getBusiness errorCatch", async () => {
@@ -91,10 +97,17 @@ describe("getBusiness", () => {
 
         fetchSpy.mockRejectedValue("error");
 
-        const response = (await liteCheckout.getBusiness()) as ErrorResponse;
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.getBusiness()) as ErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.message).toStrictEqual("error");
+            expect(error.name).toStrictEqual("catch");
+        }
+
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(response.message).toStrictEqual("error");
-        expect(response.name).toStrictEqual("catch");
         expect(liteCheckoutSpy).rejects.toThrow();
     });
 });

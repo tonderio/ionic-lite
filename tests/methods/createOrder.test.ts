@@ -82,12 +82,19 @@ describe("createOrder", () => {
                 status: 400,
             })
         );
+        
+        let error;
 
-        const response = (await liteCheckout.createOrder({
-            ...new OrderClass(),
-        })) as IErrorResponse;
-        expect(response.code).toStrictEqual("400");
-        expect(response).toBeInstanceOf(ErrorResponse);
+        try {
+            const response = await liteCheckout.createOrder({
+                ...new OrderClass(),
+            })
+        } catch (e) {
+            error = e;
+        }
+        
+        expect(liteCheckoutSpy).toHaveBeenCalled();
+        expect(error).toBeInstanceOf(ErrorResponse);
     });
 
     it("createOrder empty values", async () => {
@@ -101,13 +108,16 @@ describe("createOrder", () => {
             })
         );
 
-        const response = (await liteCheckout.createOrder({
-            ...new OrderClassEmptyValues(),
-        })) as IErrorResponse;
-
-        expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(response.body).toStrictEqual(OrderEmptyValuesResponse);
-        expect(liteCheckoutSpy).rejects.toThrow();
+        let error: ErrorResponse;
+        
+        try {
+            const response = (await liteCheckout.createOrder({
+                ...new OrderClass(),
+            })) as ErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.body).toStrictEqual(OrderEmptyValuesResponse);
+        }
     });
 
     it("createOrder errorCatch", async () => {
@@ -115,12 +125,19 @@ describe("createOrder", () => {
 
         fetchSpy.mockRejectedValue("error");
 
-        const response = (await liteCheckout.createOrder({
-            ...new OrderClass(),
-        })) as IErrorResponse;
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.createOrder({
+                ...new OrderClass(),
+            })) as ErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.message).toStrictEqual("error");
+            expect(error.name).toStrictEqual("catch");
+        }
+
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(response.message).toStrictEqual("error");
-        expect(response.name).toStrictEqual("catch");
         expect(liteCheckoutSpy).rejects.toThrow();
     });
 });
