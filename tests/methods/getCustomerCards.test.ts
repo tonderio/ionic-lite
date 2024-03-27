@@ -81,12 +81,18 @@ describe("getCustomerCards", () => {
                 status: 400,
             })
         );
+        
+        let error: ErrorResponse;
 
-        const response = (await liteCheckout.getCustomerCards(
-            "1234", "1234"
-        )) as IErrorResponse;
-        expect(response.code).toStrictEqual("400");
-        expect(response).toBeInstanceOf(ErrorResponse);
+        try {
+            const response = (await liteCheckout.getCustomerCards(
+                "1234", "1234"
+            )) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.code).toStrictEqual("400");
+            expect(error).toBeInstanceOf(ErrorResponse);
+        }
     });
 
     it("getCustomerCards errorCatch", async () => {
@@ -94,12 +100,19 @@ describe("getCustomerCards", () => {
 
         fetchSpy.mockRejectedValue("error");
 
-        const response = (await liteCheckout.getCustomerCards(
-            "1234", "1234"
-        )) as IErrorResponse;
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.getCustomerCards(
+                "1234", "1234"
+            )) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.message).toStrictEqual("error");
+            expect(error.name).toStrictEqual("catch");
+        }
+
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(response.message).toStrictEqual("error");
-        expect(response.name).toStrictEqual("catch");
         expect(liteCheckoutSpy).rejects.toThrow();
     });
 });

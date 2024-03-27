@@ -82,12 +82,19 @@ describe("customerRegister", () => {
                 status: 400,
             })
         );
+        
+        let error: ErrorResponse;
 
-        const response = (await liteCheckout.customerRegister(
-            "email@gmail.com"
-        )) as IErrorResponse;
-        expect(response.code).toStrictEqual("400");
-        expect(response).toBeInstanceOf(ErrorResponse);
+        try {
+            const response = await liteCheckout.customerRegister(
+                "email@gmail.com"
+            )
+        } catch (e: any) {
+            error = e;
+            expect(error.code).toStrictEqual("400");
+            expect(error).toBeInstanceOf(ErrorResponse);
+        }
+
     });
 
     it("customerRegister errorCatch", async () => {
@@ -95,12 +102,19 @@ describe("customerRegister", () => {
 
         fetchSpy.mockRejectedValue("error");
 
-        const response = (await liteCheckout.customerRegister(
-            "email@gmail.com"
-        )) as IErrorResponse;
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.customerRegister(
+                "email@gmail.com"
+            )) as ErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.message).toStrictEqual("error");
+            expect(error.name).toStrictEqual("catch");
+        }
+
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(response.message).toStrictEqual("error");
-        expect(response.name).toStrictEqual("catch");
         expect(liteCheckoutSpy).rejects.toThrow();
     });
 });

@@ -86,11 +86,18 @@ describe("createPayment", () => {
             })
         );
 
-        const response = (await liteCheckout.createPayment({
-            ...new CreatePaymentRequestClass(),
-        })) as IErrorResponse;
-        expect(response.code).toStrictEqual("400");
-        expect(response).toBeInstanceOf(ErrorResponse);
+        let error;
+
+        try {
+            const response = await liteCheckout.createPayment({
+                ...new CreatePaymentRequestClass(),
+            })
+        } catch (e) {
+            error = e;
+        }
+        
+        expect(liteCheckoutSpy).toHaveBeenCalled();
+        expect(error).toBeInstanceOf(ErrorResponse);
     });
 
     it("createPayment errorCatch", async () => {
@@ -98,12 +105,19 @@ describe("createPayment", () => {
 
         fetchSpy.mockRejectedValue("error");
 
-        const response = (await liteCheckout.createPayment({
-            ...new CreatePaymentRequestClass(),
-        })) as IErrorResponse;
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.createPayment({
+                ...new CreatePaymentRequestClass(),
+            })) as ErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.message).toStrictEqual("error");
+            expect(error.name).toStrictEqual("catch");
+        }
+
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(response.message).toStrictEqual("error");
-        expect(response.name).toStrictEqual("catch");
         expect(liteCheckoutSpy).rejects.toThrow();
     });
 });

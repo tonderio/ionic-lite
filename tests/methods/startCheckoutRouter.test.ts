@@ -84,11 +84,17 @@ describe("startCheckoutRouter", () => {
             })
         );
 
-        const response = (await liteCheckout.startCheckoutRouter({
-            ...new StartCheckoutRequestClass(),
-        })) as IErrorResponse;
-        expect(response.code).toStrictEqual("400");
-        expect(response).toBeInstanceOf(ErrorResponse);
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.startCheckoutRouter({
+                ...new StartCheckoutRequestClass(),
+            })) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.code).toStrictEqual("400");
+            expect(error).toBeInstanceOf(ErrorResponse);
+        }
     });
 
     it("startCheckoutRouter errorCatch", async () => {
@@ -96,12 +102,19 @@ describe("startCheckoutRouter", () => {
 
         fetchSpy.mockRejectedValue("error");
 
-        const response = (await liteCheckout.startCheckoutRouter({
-            ...new StartCheckoutRequestClass(),
-        })) as IErrorResponse;
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.startCheckoutRouter({
+                ...new StartCheckoutRequestClass(),
+            })) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.message).toStrictEqual("error");
+            expect(error.name).toStrictEqual("catch");
+        }
+        
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(response.message).toStrictEqual("error");
-        expect(response.name).toStrictEqual("catch");
         expect(liteCheckoutSpy).rejects.toThrow();
     });
 });

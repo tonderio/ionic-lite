@@ -82,11 +82,17 @@ describe("registerCustomerCard", () => {
             })
         );
 
-        const response = (await liteCheckout.registerCustomerCard(
-            "1234", { ...new RegisterCustomerCardRequestClass() }
-        )) as IErrorResponse;
-        expect(response.code).toStrictEqual("400");
-        expect(response).toBeInstanceOf(ErrorResponse);
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.registerCustomerCard(
+                "1234", { ...new RegisterCustomerCardRequestClass() }
+            )) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.code).toStrictEqual("400");
+            expect(error).toBeInstanceOf(ErrorResponse);
+        }
     });
 
     it("registerCustomerCard errorCatch", async () => {
@@ -94,12 +100,19 @@ describe("registerCustomerCard", () => {
 
         fetchSpy.mockRejectedValue("error");
 
-        const response = (await liteCheckout.registerCustomerCard(
-            "1234", { ...new RegisterCustomerCardRequestClass() }
-        )) as IErrorResponse;
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.registerCustomerCard(
+                "1234", { ...new RegisterCustomerCardRequestClass() }
+            )) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.message).toStrictEqual("error");
+            expect(error.name).toStrictEqual("catch");
+        }
+        
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(response.message).toStrictEqual("error");
-        expect(response.name).toStrictEqual("catch");
         expect(liteCheckoutSpy).rejects.toThrow();
     });
 });

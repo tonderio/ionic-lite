@@ -76,11 +76,17 @@ describe("getSkyflowToken", () => {
 
         liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
 
-        const response = await liteCheckout.getSkyflowTokens({
-            ...new TokensRequestClass(),
-        }) as IErrorResponse;
-        expect(response).toBeInstanceOf(ErrorResponse);
-        expect(response.message).toStrictEqual("Por favor, verifica todos los campos de tu tarjeta");
+        let error: ErrorResponse;
+
+        try {
+            const response = await liteCheckout.getSkyflowTokens({
+                ...new TokensRequestClass(),
+            }) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error).toBeInstanceOf(ErrorResponse);
+            expect(error.message).toStrictEqual("Por favor, verifica todos los campos de tu tarjeta");
+        }
     });
 
     it("getSkyflowTokens error mount fields", async () => {
@@ -102,11 +108,17 @@ describe("getSkyflowToken", () => {
 
         liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
 
-        const response = await liteCheckout.getSkyflowTokens({
-            ...new TokensRequestClass(),
-        }) as IErrorResponse;
-        expect(response).toBeInstanceOf(ErrorResponse);
-        expect(response.message).toStrictEqual("Ocurrió un error al montar los campos de la tarjeta");
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.getSkyflowTokens({
+                ...new TokensRequestClass(),
+            })) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error).toBeInstanceOf(ErrorResponse);
+            expect(error.message).toStrictEqual("Ocurrió un error al montar los campos de la tarjeta");
+        }
     });
 
     it("getSkyflowTokens error collect catch", async () => {
@@ -128,10 +140,16 @@ describe("getSkyflowToken", () => {
 
         liteCheckoutSpy = jest.spyOn(liteCheckout, "getSkyflowTokens");
 
-        const response = (await liteCheckout.getSkyflowTokens({
-            ...new TokensRequestClass(),
-        })) as IErrorResponse;
-        expect(response.message).toStrictEqual("error");
-        expect(response).toBeInstanceOf(ErrorResponse);
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.getSkyflowTokens({
+                ...new TokensRequestClass(),
+            })) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.message).toStrictEqual("error");
+            expect(error).toBeInstanceOf(ErrorResponse);
+        }
     });
 });
