@@ -1,37 +1,12 @@
-export const createObserver = ({ target }: { target: string }): Promise<any> => {
-
-  return new Promise((resolve, reject) => {
-
-    let hasChanged = false;
-
-    // Select the node that will be observed for mutations
-    const targetNode: any = document.querySelector(target);
-
-    // Options for the observer (which mutations to observe)
-    const config = { attributes: true, childList: true, subtree: true };
-
-    // Callback function to execute when mutations are observed
-    const callback = (mutationList: any, observer: MutationObserver) => {
-      for (const mutation of mutationList) {
-        if (mutation.type === "childList") {
-          hasChanged = true;
-          resolve(mutation)
-        }
-      }
-    };
-
-    // Create an observer instance linked to the callback function
-    const observer = new MutationObserver(callback);
-
-    // Start observing the target node for configured mutations
-    observer.observe(targetNode, config);
-
-    window.setTimeout(() => {
-      if (!hasChanged) {
-        reject("Mounting error");
-      }
-    }, 5000);
-
-  })
-
-} 
+export const getBrowserInfo = () => {
+  const browserInfo = {
+    javascript_enabled: true,  // Assumed since JavaScript is running
+    time_zone: new Date().getTimezoneOffset(),
+    language: navigator.language || 'en-US', // Fallback to 'en-US'
+    color_depth: window.screen ? window.screen.colorDepth : null,
+    screen_width: window.screen ? window.screen.width * window.devicePixelRatio || window.screen.width : null,
+    screen_height: window.screen ? window.screen.height * window.devicePixelRatio || window.screen.height : null,
+    user_agent: navigator.userAgent,
+  };
+  return browserInfo;
+}
