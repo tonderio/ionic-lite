@@ -437,6 +437,84 @@ const jsonResponseRouter = await liteCheckout.startCheckoutRouter(
 
 ## Take actions on base to the checkout router response
 
+# Checkout router full
+
+<font size="4">This method integrate the create order, create payment and checkout router methods into one method, the info required to this method is:</font>
+
+```typescript
+
+const returnUrl = "http://localhost:8100/payment/success";
+
+let checkoutData = {
+  customer: {
+    name: "Jhon",
+    lastname: "Doe",
+    email: "john.c.calhoun@examplepetstore.com",
+    phone: "+58452258525"
+  },
+  order: {
+    items: [
+      {
+        description: "Test product description",
+        quantity: 1,
+        price_unit: 25,
+        discount: 1,
+        taxes: 12,
+        product_reference: 89456123,
+        name: "Test product",
+        amount_total: 25
+      }
+    ]
+  },
+  return_url: returnUrl,
+  total: 25,
+  isSandbox: true,
+  metadata: {},
+  currency: "MXN",
+  skyflowTokens: {
+    cardholder_name: "",
+    card_number: "",
+    expiration_year: "",
+    expiration_month: "",
+    cvv: "",
+    skyflow_id: ""
+  }
+}
+
+```
+
+<font size="4">It is required get the skyflow tokens to add it to the checkout router method, the values of the variable skyflowFields come from your html form</font>
+
+```typescript
+
+const merchantData: any = await liteCheckout.getBusiness();
+
+const { vault_id, vault_url } = merchantData;
+
+const skyflowFields = {
+  card_number: this.paymentForm.value.cardNumber,
+  cvv: this.paymentForm.value.cvv,
+  expiration_month: this.paymentForm.value.month,
+  expiration_year: this.paymentForm.value.expirationYear,
+  cardholder_name: this.paymentForm.value.name
+}
+
+const skyflowTokens = await liteCheckout.getSkyflowTokens({
+  vault_id: vault_id,
+  vault_url: vault_url,
+  data: skyflowFields
+})
+
+checkoutData.skyflowTokens = skyflowTokens;
+
+const jsonResponseRouter: any = await liteCheckout.startCheckoutRouterFull(
+  checkoutData
+);
+
+```
+
+<font size="4">The response is the same to the startCheckoutRouter method. Take actions on base to the checkout router response</font>
+
 # Customer Cards(Register)
 
 ## Register customer card

@@ -2,9 +2,10 @@ import Skyflow from "skyflow-js";
 import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
 import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
 import { Business } from "../types/commons";
-import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest } from "../types/requests";
+import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest, StartCheckoutFullRequest } from "../types/requests";
 import { GetBusinessResponse, CustomerRegisterResponse, CreateOrderResponse, CreatePaymentResponse, StartCheckoutResponse, GetVaultTokenResponse, IErrorResponse, GetCustomerCardsResponse, RegisterCustomerCardResponse } from "../types/responses";
 import { ErrorResponse } from "./errorResponse";
+import { getBrowserInfo } from "../helpers/utils";
 
 declare global {
   interface Window {
@@ -146,6 +147,127 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       throw await this.buildErrorResponse(response);
     } catch (e) {
       throw this.buildErrorResponseFromCatch(e);
+    }
+  }
+
+  async startCheckoutRouterFull(routerFullData: StartCheckoutFullRequest): Promise<StartCheckoutResponse | ErrorResponse> {
+    
+    try {
+
+      const { 
+        order, 
+        total, 
+        customer, 
+        skyflowTokens, 
+        return_url, 
+        isSandbox, 
+        metadata, 
+        currency 
+      } = routerFullData;
+
+      const merchantResult = await this.getBusiness();
+
+      const customerResult : CustomerRegisterResponse | ErrorResponse = await this.customerRegister(customer.email);
+
+      if(customerResult && "auth_token" in customerResult && merchantResult && "reference" in merchantResult) {
+
+        const orderData: CreateOrderRequest = {
+          business: this.apiKeyTonder,
+          client: customerResult.auth_token,
+          billing_address_id: null,
+          shipping_address_id: null,
+          amount: total,
+          reference: merchantResult.reference,
+          is_oneclick: true,
+          items: order.items,
+        };
+
+        const orderResult = await this.createOrder(orderData);
+
+        const now = new Date();
+
+        const dateString = now.toISOString();
+
+        if("id" in orderResult && "id" in customerResult && "business" in merchantResult) {
+
+          const paymentItems: CreatePaymentRequest = {
+            business_pk: merchantResult.business.pk,
+            amount: total,
+            date: dateString,
+            order_id: orderResult.id,
+            client_id: customerResult.id
+          };
+
+          const paymentResult = await this.createPayment(
+            paymentItems
+          );
+
+          let deviceSessionIdTonder: any;
+
+          const { openpay_keys, business } = merchantResult
+
+          if (openpay_keys.merchant_id && openpay_keys.public_key) {
+            deviceSessionIdTonder = await this.getOpenpayDeviceSessionID(
+              openpay_keys.merchant_id,
+              openpay_keys.public_key,
+              isSandbox
+            );
+          }
+
+          const routerItems: StartCheckoutRequest = {
+            card: skyflowTokens,
+            name: skyflowTokens.cardholder_name,
+            last_name: customer.lastname,
+            email_client: customer.email,
+            phone_number: customer.phone,
+            return_url: return_url,
+            id_product: "no_id",
+            quantity_product: 1,
+            id_ship: "0",
+            instance_id_ship: "0",
+            amount: total,
+            title_ship: "shipping",
+            description: "transaction",
+            device_session_id: deviceSessionIdTonder ? deviceSessionIdTonder : null,
+            token_id: "",
+            order_id: ("id" in orderResult) && orderResult.id,
+            business_id: business.pk,
+            payment_id: ("pk" in paymentResult) && paymentResult.pk,
+            source: 'sdk',
+            metadata: metadata,
+            browser_info: getBrowserInfo(),
+            currency: currency
+          };
+
+          const checkoutResult = await this.startCheckoutRouter(routerItems);
+
+          return checkoutResult;
+          
+        } else {
+
+          throw new ErrorResponse({
+            code: "500",
+            body: orderResult as any,
+            name: "Keys error",
+            message: "Order response errors"
+          } as IErrorResponse)
+        
+        }
+      
+      } else {
+
+        throw new ErrorResponse({
+          code: "500",
+          body: merchantResult as any,
+          name: "Keys error",
+          message: "Merchant or customer reposne errors"
+        } as IErrorResponse)
+      
+      }
+    } catch (e) {
+      
+      throw this.buildErrorResponseFromCatch(e);
+    
     }
   }
 

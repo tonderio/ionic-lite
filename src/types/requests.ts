@@ -63,3 +63,28 @@ export type TokensRequest = {
         [key: string]: any;
     }
 }
+
+export type StartCheckoutFullRequest = {
+    order: {
+        items: OrderItem[];
+    };
+    total: number;
+    customer: {
+        name: string;
+        lastname: string;
+        email: string;
+        phone: string;
+    };
+    skyflowTokens: {
+        cardholder_name: string;
+        card_number: string;
+        cvv: string;
+        expiration_year: string;
+        expiration_month: string;
+        skyflow_id: string;
+    };
+    return_url: string;
+    isSandbox: boolean;
+    metadata: any;
+    currency: string;
+}
