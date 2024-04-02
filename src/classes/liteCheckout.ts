@@ -169,7 +169,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
       const customerResult : CustomerRegisterResponse | ErrorResponse = await this.customerRegister(customer.email);
 
-      if("auth_token" in customerResult && "reference" in merchantResult) {
+      if(customerResult && "auth_token" in customerResult && merchantResult && "reference" in merchantResult) {
 
         const orderData: CreateOrderRequest = {
           business: this.apiKeyTonder,

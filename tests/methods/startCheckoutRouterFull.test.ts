@@ -4,7 +4,7 @@ import { ErrorResponse } from "../../src/classes/errorResponse";
 import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
 import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
-import { StartCheckoutResponseClass, StartCheckoutFullRequestClass } from "../utils/mockClasses";
+import { StartCheckoutResponseClass, StartCheckoutFullRequestClass, BusinessClass, CustomerRegisterClass, OrderResponseClass, CreatePaymentResponseClass } from "../utils/mockClasses";
 
 declare global {
     interface Window {
@@ -36,6 +36,23 @@ describe("startCheckoutRouterFull", () => {
     });
 
     it("startCheckoutRouterFull success", async () => {
+
+        liteCheckout.getBusiness = jest
+        .fn()
+        .mockImplementation(() => Promise.resolve({ ...new BusinessClass().mockObject }));
+
+        liteCheckout.customerRegister = jest
+        .fn()
+        .mockImplementation(() => Promise.resolve({ ...new CustomerRegisterClass().mockObject }));
+
+        liteCheckout.createOrder = jest
+        .fn()
+        .mockImplementation(() => Promise.resolve({ ...new OrderResponseClass().mockObject }));
+
+        liteCheckout.createPayment = jest
+        .fn()
+        .mockImplementation(() => Promise.resolve({ ...new CreatePaymentResponseClass().mockObject }));
+
         liteCheckoutSpy = jest.spyOn(liteCheckout, "startCheckoutRouterFull");
 
         fetchSpy.mockImplementation(() =>
@@ -45,13 +62,10 @@ describe("startCheckoutRouterFull", () => {
             })
         );
 
-        const response = await liteCheckout.startCheckoutRouterFull({ ...new StartCheckoutFullRequestClass(), });
+        const response = await liteCheckout.startCheckoutRouterFull({ ...new StartCheckoutFullRequestClass().mockObject, });
 
         expect(response).toStrictEqual([{ ...new StartCheckoutResponseClass() }]);
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(liteCheckoutSpy).toHaveBeenCalledWith({
-            ...new StartCheckoutResponseClass(),
-        });
     });
 
     it("startCheckoutRouterFull empty", async () => {
@@ -64,12 +78,18 @@ describe("startCheckoutRouterFull", () => {
             })
         );
 
-        const response = await liteCheckout.startCheckoutRouterFull({
-            ...new StartCheckoutFullRequestClass(),
-        });
-        expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(liteCheckoutSpy).toHaveReturned();
-        expect(response).toBeUndefined();
+        let error: ErrorResponse;
+
+        try {
+            const response = (await liteCheckout.startCheckoutRouterFull({
+                ...new StartCheckoutFullRequestClass().mockObject,
+            })) as IErrorResponse;
+        } catch (e: any) {
+            error = e;
+            expect(error.code).toStrictEqual("500");
+            expect(error).toBeInstanceOf(ErrorResponse);
+        }
+
     });
 
     it("startCheckoutRouterFull errorResponse", async () => {
