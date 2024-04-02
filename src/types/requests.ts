@@ -66,14 +66,14 @@ export type TokensRequest = {
 
 export type StartCheckoutFullRequest = {
     order: {
-        items: OrderItem[]
+        items: OrderItem[];
     };
     total: number;
     customer: {
-        name: string,
-        lastname: string,
-        email: string,
-        phone: string
+        name: string;
+        lastname: string;
+        email: string;
+        phone: string;
     };
     skyflowTokens: {
         cardholder_name: string;

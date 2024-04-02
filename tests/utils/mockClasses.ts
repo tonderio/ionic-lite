@@ -4,7 +4,8 @@ import {
     CreatePaymentRequest,
     RegisterCustomerCardRequest,
     StartCheckoutRequest,
-    TokensRequest
+    TokensRequest,
+    StartCheckoutFullRequest
 } from "../../src/types/requests";
 import {
     CreateOrderResponse,
@@ -495,6 +496,55 @@ export class StartCheckoutResponseClass implements StartCheckoutResponse {
                     method: "POST",
                 },
             ],
+        };
+    }
+}
+
+export class StartCheckoutFullRequestClass implements StartCheckoutFullRequest {
+    order!: { items: OrderItem[]; };
+    return_url!: string;
+    total!: number;
+    skyflowTokens!: { cardholder_name: string; card_number: string; cvv: string; expiration_year: string; expiration_month: string; skyflow_id: string; };
+    customer!: { name: string; lastname: string; email: string; phone: string; };
+    isSandbox!: boolean;
+    currency!: string;
+    metadata!: any;
+
+    get mockObject(): StartCheckoutFullRequest {
+        return {
+            order: {
+                items: [
+                    {
+                        description: "string",
+                        quantity: 25,
+                        price_unit: 25,
+                        discount: 0,
+                        taxes: 0,
+                        product_reference: 25,
+                        name: "Product text",
+                        amount_total: 25
+                    }
+                ]
+            },
+            return_url: "string",
+            total: 25,
+            skyflowTokens: { 
+                cardholder_name: "string", 
+                card_number: "string", 
+                cvv: "string", 
+                expiration_year: "string", 
+                expiration_month: "string", 
+                skyflow_id: "string", 
+            },
+            customer: { 
+                name: "string", 
+                lastname: "string", 
+                email: "string", 
+                phone: "string", 
+            },
+            isSandbox: true,
+            currency: "MXN",
+            metadata: null
         };
     }
 }

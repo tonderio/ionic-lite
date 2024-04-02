@@ -151,6 +151,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
   }
 
   async startCheckoutRouterFull(routerFullData: StartCheckoutFullRequest): Promise<StartCheckoutResponse | ErrorResponse> {
+    
     try {
 
       const { 
