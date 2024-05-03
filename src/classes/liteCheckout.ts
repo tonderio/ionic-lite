@@ -216,7 +216,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
           const routerItems: StartCheckoutRequest = {
             card: skyflowTokens,
-            name: skyflowTokens.cardholder_name,
+            name: customer.name,
             last_name: customer.lastname,
             email_client: customer.email,
             phone_number: customer.phone,
