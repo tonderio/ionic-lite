@@ -335,8 +335,8 @@ const returnUrl = "http://localhost:8100/payment/success";
 
 const routerData = {
   card: skyflowTokens,
-  name: skyflowTokens.cardholder_name,
-  last_name: "",
+  name: customerName,
+  last_name: customerLastName,
   email_client: customerEmail,
   phone_number: customerPhone,
   return_url: returnUrl,
