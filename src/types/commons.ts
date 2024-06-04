@@ -54,6 +54,7 @@ export type OrderItem = {
 
 export type PaymentData = {
     customer: Customer;
+    currency: string;
     cart: {
         total: string | number;
         items: OrderItem[];

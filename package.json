@@ -1,6 +1,6 @@
 {
   "name": "@tonder.io/ionic-lite-sdk",
-  "version": "0.0.30-beta",
+  "version": "0.0.31-beta",
   "description": "Tonder ionic lite SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
