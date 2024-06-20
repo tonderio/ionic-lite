@@ -139,6 +139,7 @@ export type StartCheckoutResponse = {
         method: string;
         object: string;
     };
+    is_route_finished: Boolean;
     transaction_status: string;
     transaction_id: number;
     payment_id: number;

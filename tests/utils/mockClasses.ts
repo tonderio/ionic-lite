@@ -365,6 +365,7 @@ export class StartCheckoutRequestClass implements StartCheckoutRequest {
 export class StartCheckoutResponseClass implements StartCheckoutResponse {
     status!: number;
     message!: string;
+    is_route_finished!: Boolean;
     psp_response!: {
         id: string;
         authorization: number;
@@ -429,6 +430,7 @@ export class StartCheckoutResponseClass implements StartCheckoutResponse {
         return {
             status: 200, // Representa un estado exitoso
             message: "Payment processing initiated",
+            is_route_finished: false,
             transaction_status: "PENDING",
             transaction_id: 1234567890,
             payment_id: 9876543210,

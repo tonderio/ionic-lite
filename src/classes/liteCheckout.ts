@@ -2,10 +2,11 @@ import Skyflow from "skyflow-js";
 import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
 import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
 import { Business } from "../types/commons";
-import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest, StartCheckoutFullRequest } from "../types/requests";
+import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest, StartCheckoutFullRequest, StartCheckoutIdRequest } from "../types/requests";
 import { GetBusinessResponse, CustomerRegisterResponse, CreateOrderResponse, CreatePaymentResponse, StartCheckoutResponse, GetVaultTokenResponse, IErrorResponse, GetCustomerCardsResponse, RegisterCustomerCardResponse } from "../types/responses";
 import { ErrorResponse } from "./errorResponse";
 import { getBrowserInfo } from "../helpers/utils";
+import { ThreeDSHandler } from "./3dsHandler";
 
 declare global {
   interface Window {
@@ -17,21 +18,32 @@ export type LiteCheckoutConstructor = {
   signal: AbortSignal;
   baseUrlTonder: string;
   apiKeyTonder: string;
+  successUrl?: string;
 };
 
 export class LiteCheckout implements LiteCheckoutConstructor {
   signal: AbortSignal;
   baseUrlTonder: string;
   apiKeyTonder: string;
+  process3ds: ThreeDSHandler;
+  successUrl?: string
 
   constructor({
     signal,
     baseUrlTonder,
     apiKeyTonder,
+    successUrl,
   }: LiteCheckoutConstructor) {
     this.baseUrlTonder = baseUrlTonder;
     this.signal = signal;
     this.apiKeyTonder = apiKeyTonder;
+    this.successUrl = successUrl;
+
+    this.process3ds = new ThreeDSHandler({ 
+      apiKey: this.apiKeyTonder, 
+      baseUrl: this.baseUrlTonder, 
+      successUrl: successUrl 
+    })
   }
 
   async getOpenpayDeviceSessionID(
@@ -72,6 +84,55 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     }
   }
 
+  async verify3dsTransaction () {
+    const result3ds = await this.process3ds.verifyTransactionStatus()
+    const resultCheckout = await this.resumeCheckout(result3ds)
+    this.process3ds.setPayload(resultCheckout)
+    if (resultCheckout && 'is_route_finished' in resultCheckout && 'provider' in resultCheckout && resultCheckout.provider === 'tonder') {
+      return resultCheckout
+    }
+    return this.handle3dsRedirect(resultCheckout)
+  }
+
+  async resumeCheckout(response: any) {
+    if (["Failed", "Declined", "Cancelled"].includes(response?.status)) {
+      const routerItems = {
+        // TODO: Replace this with reponse.checkout_id
+        checkout_id: this.process3ds.getCurrentCheckoutId(),
+      };
+      const routerResponse = await this.handleCheckoutRouter(
+        routerItems
+      );
+      return routerResponse
+    }
+    return response
+  }
+
+  async handle3dsRedirect(response: ErrorResponse | StartCheckoutResponse | false | undefined) {
+    const iframe = response && 'next_action' in response ? response?.next_action?.iframe_resources?.iframe:null
+
+    if (iframe) {
+      this.process3ds.loadIframe()!.then(() => {
+        //TODO: Check if this will be necessary on the frontend side
+        // after some the tests in production, since the 3DS process
+        // doesn't works properly on the sandbox environment
+        // setTimeout(() => {
+        //   process3ds.verifyTransactionStatus();
+        // }, 10000);
+        this.process3ds.verifyTransactionStatus();
+      }).catch((error: any) => {
+        console.log('Error loading iframe:', error)
+      })
+    } else {
+      const redirectUrl = this.process3ds.getRedirectUrl()
+      if (redirectUrl) {
+        this.process3ds.redirectToChallenge()
+      } else {
+        return response;
+      }
+    }
+  }
+  
   async customerRegister(email: string): Promise<CustomerRegisterResponse | ErrorResponse> {
     try {
       const url = `${this.baseUrlTonder}/api/v1/customer/`;
@@ -130,8 +191,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       throw this.buildErrorResponseFromCatch(e);
     }
   }
-
-  async startCheckoutRouter(routerData: StartCheckoutRequest): Promise<StartCheckoutResponse | ErrorResponse> {
+  async handleCheckoutRouter(routerData: StartCheckoutRequest | StartCheckoutIdRequest){
     try {
       const url = `${this.baseUrlTonder}/api/v1/checkout-router/`;
       const data = routerData;
@@ -150,7 +210,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     }
   }
 
-  async startCheckoutRouterFull(routerFullData: StartCheckoutFullRequest): Promise<StartCheckoutResponse | ErrorResponse> {
+  async startCheckoutRouter(routerData: StartCheckoutRequest | StartCheckoutIdRequest): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
+    const checkoutResult = await this.handleCheckoutRouter(routerData);
+    const payload = await this.init3DSRedirect(checkoutResult)
+    if(payload)
+      return checkoutResult;
+  }
+
+  async startCheckoutRouterFull(routerFullData: StartCheckoutFullRequest): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
     
     try {
 
@@ -239,10 +306,10 @@ export class LiteCheckout implements LiteCheckoutConstructor {
             currency: currency
           };
 
-          const checkoutResult = await this.startCheckoutRouter(routerItems);
-
-          return checkoutResult;
-          
+          const checkoutResult = await this.handleCheckoutRouter(routerItems);
+          const payload = await this.init3DSRedirect(checkoutResult)
+          if(payload)
+            return checkoutResult;
         } else {
 
           throw new ErrorResponse({
@@ -269,6 +336,12 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       throw this.buildErrorResponseFromCatch(e);
     
     }
+  }
+
+  async init3DSRedirect(checkoutResult: ErrorResponse | StartCheckoutResponse){
+    this.process3ds.setPayload(checkoutResult)
+    this.process3ds.saveCheckoutId(checkoutResult && 'checkout_id' in checkoutResult ? checkoutResult.checkout_id:"")
+    return await this.handle3dsRedirect(checkoutResult)
   }
 
   async getSkyflowTokens({
