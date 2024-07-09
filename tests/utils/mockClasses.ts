@@ -5,7 +5,8 @@ import {
     RegisterCustomerCardRequest,
     StartCheckoutRequest,
     TokensRequest,
-    StartCheckoutFullRequest
+    StartCheckoutFullRequest,
+    StartCheckoutRequestWithCard
 } from "../../src/types/requests";
 import {
     CreateOrderResponse,
@@ -312,7 +313,7 @@ export class CreatePaymentResponseClass implements CreatePaymentResponse {
     }
 }
 
-export class StartCheckoutRequestClass implements StartCheckoutRequest {
+export class StartCheckoutRequestClass implements StartCheckoutRequestWithCard {
     card: any;
     name: any;
     last_name!: string;

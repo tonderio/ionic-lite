@@ -65,19 +65,6 @@ export class ThreeDSHandler {
     }
   }
 
-  saveCheckoutId(checkoutId: any) {
-    localStorage.setItem('checkout_id', JSON.stringify(checkoutId))
-  }
-
-  removeCheckoutId() {
-    localStorage.removeItem("checkout_id")
-  }
-
-  getCurrentCheckoutId() {
-    const checkout_id = localStorage.getItem("checkout_id")
-    return checkout_id ? JSON.parse(checkout_id):null;
-  }
-
   getUrlWithExpiration() {
     const status = this.getStorageItem();
     if(status) {

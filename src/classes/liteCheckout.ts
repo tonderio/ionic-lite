@@ -1,12 +1,13 @@
 import Skyflow from "skyflow-js";
 import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
 import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
-import { Business } from "../types/commons";
+import { APM, Business, TonderAPM } from "../types/commons";
 import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest, StartCheckoutFullRequest, StartCheckoutIdRequest } from "../types/requests";
 import { GetBusinessResponse, CustomerRegisterResponse, CreateOrderResponse, CreatePaymentResponse, StartCheckoutResponse, GetVaultTokenResponse, IErrorResponse, GetCustomerCardsResponse, RegisterCustomerCardResponse } from "../types/responses";
 import { ErrorResponse } from "./errorResponse";
-import { getBrowserInfo } from "../helpers/utils";
+import { buildErrorResponse, buildErrorResponseFromCatch, getBrowserInfo, getPaymentMethodDetails } from "../helpers/utils";
 import { ThreeDSHandler } from "./3dsHandler";
+import { getCustomerAPMs } from "../data/api";
 
 declare global {
   interface Window {
@@ -27,7 +28,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
   apiKeyTonder: string;
   process3ds: ThreeDSHandler;
   successUrl?: string
-
+  activeAPMs: APM[] = []
   constructor({
     signal,
     baseUrlTonder,
@@ -44,6 +45,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       baseUrl: this.baseUrlTonder, 
       successUrl: successUrl 
     })
+    this.getActiveAPMs()
   }
 
   async getOpenpayDeviceSessionID(
@@ -60,7 +62,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         signal: this.signal,
       }) as string;
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
 
@@ -78,9 +80,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
       if (getBusiness.ok) return (await getBusiness.json()) as Business;
 
-      throw await this.buildErrorResponse(getBusiness);
+      throw await buildErrorResponse(getBusiness);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
 
@@ -97,8 +99,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
   async resumeCheckout(response: any) {
     if (["Failed", "Declined", "Cancelled"].includes(response?.status)) {
       const routerItems = {
-        // TODO: Replace this with reponse.checkout_id
-        checkout_id: this.process3ds.getCurrentCheckoutId(),
+        checkout_id: response.checkout?.id,
       };
       const routerResponse = await this.handleCheckoutRouter(
         routerItems
@@ -148,9 +149,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return await response.json() as CustomerRegisterResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
 
@@ -167,9 +168,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         body: JSON.stringify(data),
       });
       if (response.ok) return await response.json() as CreateOrderResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
 
@@ -186,9 +187,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         body: JSON.stringify(data),
       });
       if (response.ok) return await response.json() as CreatePaymentResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
   async handleCheckoutRouter(routerData: StartCheckoutRequest | StartCheckoutIdRequest){
@@ -204,9 +205,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         body: JSON.stringify(data),
       });
       if (response.ok) return await response.json() as StartCheckoutResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
 
@@ -229,7 +230,8 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         return_url, 
         isSandbox, 
         metadata, 
-        currency 
+        currency,
+        payment_method 
       } = routerFullData;
 
       const merchantResult = await this.getBusiness();
@@ -282,7 +284,6 @@ export class LiteCheckout implements LiteCheckoutConstructor {
           }
 
           const routerItems: StartCheckoutRequest = {
-            card: skyflowTokens,
             name: customer.name,
             last_name: customer.lastname,
             email_client: customer.email,
@@ -303,7 +304,11 @@ export class LiteCheckout implements LiteCheckoutConstructor {
             source: 'sdk',
             metadata: metadata,
             browser_info: getBrowserInfo(),
-            currency: currency
+            currency: currency,
+            ...( !!payment_method
+              ? {payment_method}
+              : {card: skyflowTokens}
+            )
           };
 
           const checkoutResult = await this.handleCheckoutRouter(routerItems);
@@ -333,14 +338,13 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       }
     } catch (e) {
       
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     
     }
   }
 
   async init3DSRedirect(checkoutResult: ErrorResponse | StartCheckoutResponse){
     this.process3ds.setPayload(checkoutResult)
-    this.process3ds.saveCheckoutId(checkoutResult && 'checkout_id' in checkoutResult ? checkoutResult.checkout_id:"")
     return await this.handle3dsRedirect(checkoutResult)
   }
 
@@ -370,14 +374,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     const mountFail = result.some((item: boolean) => !item);
 
     if (mountFail) {
-      throw this.buildErrorResponseFromCatch(Error("Ocurrió un error al montar los campos de la tarjeta"));
+      throw buildErrorResponseFromCatch(Error("Ocurrió un error al montar los campos de la tarjeta"));
     } else {
       try {
         const collectResponseSkyflowTonder = await collectContainer.collect() as any;
         if (collectResponseSkyflowTonder) return collectResponseSkyflowTonder["records"][0]["fields"];
-        throw this.buildErrorResponseFromCatch(Error("Por favor, verifica todos los campos de tu tarjeta"))
+        throw buildErrorResponseFromCatch(Error("Por favor, verifica todos los campos de tu tarjeta"))
       } catch (error) {
-        throw this.buildErrorResponseFromCatch(error);
+        throw buildErrorResponseFromCatch(error);
       }
     }
   }
@@ -435,9 +439,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return await response.json() as RegisterCustomerCardResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (error) {
-      throw this.buildErrorResponseFromCatch(error);
+      throw buildErrorResponseFromCatch(error);
     }
   }
 
@@ -453,9 +457,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return await response.json() as GetCustomerCardsResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (error) {
-      throw this.buildErrorResponseFromCatch(error);
+      throw buildErrorResponseFromCatch(error);
     }
   }
 
@@ -471,53 +475,10 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return true;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (error) {
-      throw this.buildErrorResponseFromCatch(error);
+      throw buildErrorResponseFromCatch(error);
     }
-  }
-
-  private buildErrorResponseFromCatch(e: any): ErrorResponse {
-    
-    const error = new ErrorResponse({
-      code: e?.status ? e.status : e.code,
-      body: e?.body,
-      name: e ? typeof e == "string" ? "catch" : (e as Error).name : "Error",
-      message: e ? (typeof e == "string" ? e : (e as Error).message) : "Error",
-      stack: typeof e == "string" ? undefined : (e as Error).stack,
-    })
-
-    return error;
-  }
-
-  private async buildErrorResponse(
-    response: Response,
-    stack: string | undefined = undefined
-  ): Promise<ErrorResponse> {
-
-    let body, status, message = "Error";
-
-    if(response && "json" in response) {
-      body = await response?.json();
-    }
-
-    if(response && "status" in response) {
-      status = response.status.toString();
-    }
-
-    if(response && "text" in response) {
-      message = await response.text();
-    }
-
-    const error = new ErrorResponse({
-      code: status,
-      body: body,
-      name: status,
-      message: message,
-      stack,
-    } as IErrorResponse)
-    
-    return error;
   }
 
   private async getFields(data: any, collectContainer: CollectContainer): Promise<{ element: CollectElement, key: string }[]> {
@@ -531,5 +492,30 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         return { element: cardHolderNameElement, key: key };
       })
     )
+  }
+
+  async getActiveAPMs(): Promise<APM[]> {
+    try {
+      const apms_response = await getCustomerAPMs(this.baseUrlTonder, this.apiKeyTonder);
+      const apms_results = apms_response && apms_response['results'] && apms_response['results'].length > 0 ? apms_response['results'] : []
+      this.activeAPMs = apms_results
+        .filter((apmItem: TonderAPM) =>
+          apmItem.category.toLowerCase() !== 'cards')
+        .map((apmItem: TonderAPM) => {
+          const apm: APM = {
+            id: apmItem.pk,
+            payment_method: apmItem.payment_method,
+            priority: apmItem.priority,
+            category: apmItem.category,
+            ...getPaymentMethodDetails(apmItem.payment_method,)
+          }
+          return apm;
+        }).sort((a: APM, b: APM) => a.priority - b.priority);
+
+      return this.activeAPMs  
+    } catch (e) {
+      console.error("Error getting APMS", e);
+      return [];
+    }
   }
 }
