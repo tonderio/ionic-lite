@@ -2,7 +2,6 @@ type ThreeDSHandlerContructor = {
   payload?: any,
   apiKey?: string,
   baseUrl?: string,
-  successUrl?: Location | string
 }
 
 export class ThreeDSHandler {
@@ -10,19 +9,16 @@ export class ThreeDSHandler {
   baseUrl?: string
   apiKey?: string
   payload?: any
-  successUrl?: Location | string
   localStorageKey: string = "verify_transaction_status_url"
 
   constructor({
     payload = null,
     apiKey,
     baseUrl,
-    successUrl
   }: ThreeDSHandlerContructor) {
     this.baseUrl = baseUrl,
     this.apiKey = apiKey,
-    this.payload = payload,
-    this.successUrl = successUrl
+    this.payload = payload
   }
 
   setStorageItem (data: any) {

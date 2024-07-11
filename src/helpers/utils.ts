@@ -10,3 +10,7 @@ export const getBrowserInfo = () => {
   };
   return browserInfo;
 }
+
+export const getBusinessId = (merchantData: any) =>{
+  return merchantData && "business" in merchantData ? merchantData?.business?.pk:""
+}
