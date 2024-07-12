@@ -431,14 +431,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         await this.#fetchMerchantData()
       }
 
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/`, {
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/`, {
         method: 'POST',
         headers: {
           'Authorization': `Token ${customerToken}`,
           'Content-Type': 'application/json'
         },
         signal: this.signal,
-        body: JSON.stringify({...data, business_id: getBusinessId(this.merchantData) })
+        body: JSON.stringify({...data})
       });
 
       if (response.ok) return await response.json() as RegisterCustomerCardResponse;
@@ -454,7 +454,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         await this.#fetchMerchantData()
       }
 
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/cards?business=${getBusinessId(this.merchantData)}`, {
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards`, {
         method: 'GET',
         headers: {
           'Authorization': `Token ${customerToken}`,
@@ -472,7 +472,11 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
   async deleteCustomerCard(customerToken: string, skyflowId: string = ""): Promise<Boolean | ErrorResponse> {
     try {
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/${skyflowId}`, {
+      if(!this.merchantData){
+        await this.#fetchMerchantData()
+      }
+
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/${skyflowId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Token ${customerToken}`,
