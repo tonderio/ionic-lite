@@ -5,7 +5,7 @@ import { APM, Business, TonderAPM } from "../types/commons";
 import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest, StartCheckoutFullRequest, StartCheckoutIdRequest } from "../types/requests";
 import { GetBusinessResponse, CustomerRegisterResponse, CreateOrderResponse, CreatePaymentResponse, StartCheckoutResponse, GetVaultTokenResponse, IErrorResponse, GetCustomerCardsResponse, RegisterCustomerCardResponse } from "../types/responses";
 import { ErrorResponse } from "./errorResponse";
-import { buildErrorResponse, buildErrorResponseFromCatch, getBrowserInfo, getPaymentMethodDetails } from "../helpers/utils";
+import { buildErrorResponse, buildErrorResponseFromCatch, getBrowserInfo, getPaymentMethodDetails, getBusinessId } from "../helpers/utils";
 import { ThreeDSHandler } from "./3dsHandler";
 import { getCustomerAPMs } from "../data/api";
 
@@ -19,7 +19,6 @@ export type LiteCheckoutConstructor = {
   signal: AbortSignal;
   baseUrlTonder: string;
   apiKeyTonder: string;
-  successUrl?: string;
 };
 
 export class LiteCheckout implements LiteCheckoutConstructor {
@@ -27,23 +26,20 @@ export class LiteCheckout implements LiteCheckoutConstructor {
   baseUrlTonder: string;
   apiKeyTonder: string;
   process3ds: ThreeDSHandler;
-  successUrl?: string
   activeAPMs: APM[] = []
+  merchantData?: Business | ErrorResponse;
+
   constructor({
     signal,
     baseUrlTonder,
     apiKeyTonder,
-    successUrl,
   }: LiteCheckoutConstructor) {
     this.baseUrlTonder = baseUrlTonder;
     this.signal = signal;
     this.apiKeyTonder = apiKeyTonder;
-    this.successUrl = successUrl;
-
     this.process3ds = new ThreeDSHandler({ 
       apiKey: this.apiKeyTonder, 
-      baseUrl: this.baseUrlTonder, 
-      successUrl: successUrl 
+      baseUrl: this.baseUrlTonder,
     })
     this.getActiveAPMs()
   }
@@ -63,6 +59,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       }) as string;
     } catch (e) {
       throw buildErrorResponseFromCatch(e);
+    }
+  }
+  async #fetchMerchantData() {
+    try {
+      this.merchantData = await this.getBusiness();
+      return this.merchantData
+    }catch(e){
+      return this.merchantData
     }
   }
 
@@ -231,7 +235,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         isSandbox, 
         metadata, 
         currency,
-        payment_method 
+        payment_method
       } = routerFullData;
 
       const merchantResult = await this.getBusiness();
@@ -428,14 +432,18 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
   async registerCustomerCard(customerToken: string, data: RegisterCustomerCardRequest): Promise<RegisterCustomerCardResponse | ErrorResponse> {
     try {
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/`, {
+      if(!this.merchantData){
+        await this.#fetchMerchantData()
+      }
+
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/`, {
         method: 'POST',
         headers: {
           'Authorization': `Token ${customerToken}`,
           'Content-Type': 'application/json'
         },
         signal: this.signal,
-        body: JSON.stringify(data)
+        body: JSON.stringify({...data})
       });
 
       if (response.ok) return await response.json() as RegisterCustomerCardResponse;
@@ -445,9 +453,13 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     }
   }
 
-  async getCustomerCards(customerToken: string, query: string = ""): Promise<GetCustomerCardsResponse | ErrorResponse> {
+  async getCustomerCards(customerToken: string): Promise<GetCustomerCardsResponse | ErrorResponse> {
     try {
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/${query}`, {
+      if(!this.merchantData){
+        await this.#fetchMerchantData()
+      }
+
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards`, {
         method: 'GET',
         headers: {
           'Authorization': `Token ${customerToken}`,
@@ -465,7 +477,11 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
   async deleteCustomerCard(customerToken: string, skyflowId: string = ""): Promise<Boolean | ErrorResponse> {
     try {
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/cards/${skyflowId}`, {
+      if(!this.merchantData){
+        await this.#fetchMerchantData()
+      }
+
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/${skyflowId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Token ${customerToken}`,
@@ -512,7 +528,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
           return apm;
         }).sort((a: APM, b: APM) => a.priority - b.priority);
 
-      return this.activeAPMs  
+      return this.activeAPMs
     } catch (e) {
       console.error("Error getting APMS", e);
       return [];
