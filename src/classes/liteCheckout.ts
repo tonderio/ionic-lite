@@ -1,112 +1,166 @@
-import { TokensRequest } from "../types/skyflow";
 import Skyflow from "skyflow-js";
+import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
+import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
+import { Business } from "../types/commons";
+import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest, StartCheckoutFullRequest, StartCheckoutIdRequest } from "../types/requests";
+import { GetBusinessResponse, CustomerRegisterResponse, CreateOrderResponse, CreatePaymentResponse, StartCheckoutResponse, GetVaultTokenResponse, IErrorResponse, GetCustomerCardsResponse, RegisterCustomerCardResponse } from "../types/responses";
+import { ErrorResponse } from "./errorResponse";
+import { getBrowserInfo, getBusinessId } from "../helpers/utils";
+import { ThreeDSHandler } from "./3dsHandler";
 
 declare global {
-  interface Window { OpenPay: any; }
+  interface Window {
+    OpenPay: any;
+  }
 }
 
-type LiteCheckoutConstructor = {
-  signal: AbortSignal,
-  baseUrlTonder: string,
-  apiKeyTonder: string
-}
-
-export class LiteCheckout {
-
-  baseUrlTonder: string;
+export type LiteCheckoutConstructor = {
   signal: AbortSignal;
+  baseUrlTonder: string;
   apiKeyTonder: string;
+};
 
-  constructor ({ signal, baseUrlTonder, apiKeyTonder }: LiteCheckoutConstructor) {
+export class LiteCheckout implements LiteCheckoutConstructor {
+  signal: AbortSignal;
+  baseUrlTonder: string;
+  apiKeyTonder: string;
+  process3ds: ThreeDSHandler;
+  merchantData?: Business | ErrorResponse;
+
+  constructor({
+    signal,
+    baseUrlTonder,
+    apiKeyTonder,
+  }: LiteCheckoutConstructor) {
     this.baseUrlTonder = baseUrlTonder;
     this.signal = signal;
     this.apiKeyTonder = apiKeyTonder;
+    this.process3ds = new ThreeDSHandler({ 
+      apiKey: this.apiKeyTonder, 
+      baseUrl: this.baseUrlTonder, 
+    })
   }
 
-  async getOpenpayDeviceSessionID(merchant_id: string, public_key: string) {
-    let openpay = await window.OpenPay;
-    openpay.setId(merchant_id);
-    openpay.setApiKey(public_key);
-    openpay.setSandboxMode(true);
-    var response = await openpay.deviceData.setup({ signal: this.signal });
-    return response;
+  async getOpenpayDeviceSessionID(
+    merchant_id: string,
+    public_key: string,
+    is_sandbox: boolean
+  ): Promise<string | ErrorResponse> {
+    try {
+      let openpay = await window.OpenPay;
+      openpay.setId(merchant_id);
+      openpay.setApiKey(public_key);
+      openpay.setSandboxMode(is_sandbox);
+      return await openpay.deviceData.setup({
+        signal: this.signal,
+      }) as string;
+    } catch (e) {
+      throw this.buildErrorResponseFromCatch(e);
+    }
   }
-  async getBusiness() {
-    const getBusiness = await fetch(
-      `${this.baseUrlTonder}/api/v1/payments/business/${this.apiKeyTonder}`,
-      {
+  async #fetchMerchantData() {
+    try {
+      this.merchantData = await this.getBusiness();
+      return this.merchantData
+    }catch(e){
+      return this.merchantData
+    }
+  }
+
+  async getBusiness(): Promise<GetBusinessResponse | ErrorResponse> {
+    try {
+      const getBusiness = await fetch(
+        `${this.baseUrlTonder}/api/v1/payments/business/${this.apiKeyTonder}`,
+        {
+          headers: {
+            Authorization: `Token ${this.apiKeyTonder}`,
+          },
+          signal: this.signal,
+        }
+      );
+
+      if (getBusiness.ok) return (await getBusiness.json()) as Business;
+
+      throw await this.buildErrorResponse(getBusiness);
+    } catch (e) {
+      throw this.buildErrorResponseFromCatch(e);
+    }
+  }
+
+  async verify3dsTransaction () {
+    const result3ds = await this.process3ds.verifyTransactionStatus()
+    const resultCheckout = await this.resumeCheckout(result3ds)
+    this.process3ds.setPayload(resultCheckout)
+    if (resultCheckout && 'is_route_finished' in resultCheckout && 'provider' in resultCheckout && resultCheckout.provider === 'tonder') {
+      return resultCheckout
+    }
+    return this.handle3dsRedirect(resultCheckout)
+  }
+
+  async resumeCheckout(response: any) {
+    if (["Failed", "Declined", "Cancelled"].includes(response?.status)) {
+      const routerItems = {
+        // TODO: Replace this with reponse.checkout_id
+        checkout_id: this.process3ds.getCurrentCheckoutId(),
+      };
+      const routerResponse = await this.handleCheckoutRouter(
+        routerItems
+      );
+      return routerResponse
+    }
+    return response
+  }
+
+  async handle3dsRedirect(response: ErrorResponse | StartCheckoutResponse | false | undefined) {
+    const iframe = response && 'next_action' in response ? response?.next_action?.iframe_resources?.iframe:null
+
+    if (iframe) {
+      this.process3ds.loadIframe()!.then(() => {
+        //TODO: Check if this will be necessary on the frontend side
+        // after some the tests in production, since the 3DS process
+        // doesn't works properly on the sandbox environment
+        // setTimeout(() => {
+        //   process3ds.verifyTransactionStatus();
+        // }, 10000);
+        this.process3ds.verifyTransactionStatus();
+      }).catch((error: any) => {
+        console.log('Error loading iframe:', error)
+      })
+    } else {
+      const redirectUrl = this.process3ds.getRedirectUrl()
+      if (redirectUrl) {
+        this.process3ds.redirectToChallenge()
+      } else {
+        return response;
+      }
+    }
+  }
+  
+  async customerRegister(email: string): Promise<CustomerRegisterResponse | ErrorResponse> {
+    try {
+      const url = `${this.baseUrlTonder}/api/v1/customer/`;
+      const data = { email: email };
+      const response = await fetch(url, {
+        method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Token ${this.apiKeyTonder}`,
         },
         signal: this.signal,
-      }
-    );
-    const response = await getBusiness.json();
-    return response
-  }
-  async customerRegister(email: string) {
-    const url = `${this.baseUrlTonder}/api/v1/customer/`;
-    const data = { email: email };
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${this.apiKeyTonder}`,
-      },
-      signal: this.signal,
-      body: JSON.stringify(data),
-    });
-  
-    if (response.status === 201) {
-      const jsonResponse = await response.json();
-      return jsonResponse;
-    } else {
-      throw new Error(`Error: ${response.statusText}`);
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) return await response.json() as CustomerRegisterResponse;
+      throw await this.buildErrorResponse(response);
+    } catch (e) {
+      throw this.buildErrorResponseFromCatch(e);
     }
   }
 
-  async createOrder(orderItems: any) {
-    const url = `${this.baseUrlTonder}/api/v1/orders/`;
-    const data = orderItems;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${this.apiKeyTonder}`,
-      },
-      body: JSON.stringify(data),
-    });
-    if (response.status === 201) {
-      const jsonResponse = await response.json();
-      return jsonResponse;
-    } else {
-      throw new Error(`Error: ${response.statusText}`);
-    }
-  }
-
-  async createPayment(paymentItems: { business_pk: string }) {
-    const url = `${this.baseUrlTonder}/api/v1/business/${paymentItems.business_pk}/payments/`;
-    const data = paymentItems;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${this.apiKeyTonder}`,
-      },
-      body: JSON.stringify(data),
-    });
-    if (response.status >= 200 && response.status <=299) {
-      const jsonResponse = await response.json();
-      return jsonResponse;
-    } else {
-      throw new Error(`Error: ${response.statusText}`);
-    }
-  }
-
-  async startCheckoutRouter(routerItems: any) {
+  async createOrder(orderItems: CreateOrderRequest): Promise<CreateOrderResponse | ErrorResponse> {
     try {
-      const url = `${this.baseUrlTonder}/api/v1/checkout-router/`;
-      const data = routerItems;
+      const url = `${this.baseUrlTonder}/api/v1/orders/`;
+      const data = orderItems;
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -115,19 +169,189 @@ export class LiteCheckout {
         },
         body: JSON.stringify(data),
       });
-      if (response.status >= 200 && response.status <= 299) {
-        const jsonResponse = await response.json();
-        return jsonResponse;
-      } else {
-        throw new Error("Failed to start checkout router")
-      }
-    } catch (error) {
-      throw error
+      if (response.ok) return await response.json() as CreateOrderResponse;
+      throw await this.buildErrorResponse(response);
+    } catch (e) {
+      throw this.buildErrorResponseFromCatch(e);
     }
   }
 
-  async getSkyflowTokens({ vault_id, vault_url, data }: TokensRequest): Promise<any> {
+  async createPayment(paymentItems: CreatePaymentRequest): Promise<CreatePaymentResponse | ErrorResponse> {
+    try {
+      const url = `${this.baseUrlTonder}/api/v1/business/${paymentItems.business_pk}/payments/`;
+      const data = paymentItems;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Token ${this.apiKeyTonder}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (response.ok) return await response.json() as CreatePaymentResponse;
+      throw await this.buildErrorResponse(response);
+    } catch (e) {
+      throw this.buildErrorResponseFromCatch(e);
+    }
+  }
+  async handleCheckoutRouter(routerData: StartCheckoutRequest | StartCheckoutIdRequest){
+    try {
+      const url = `${this.baseUrlTonder}/api/v1/checkout-router/`;
+      const data = routerData;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Token ${this.apiKeyTonder}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (response.ok) return await response.json() as StartCheckoutResponse;
+      throw await this.buildErrorResponse(response);
+    } catch (e) {
+      throw this.buildErrorResponseFromCatch(e);
+    }
+  }
 
+  async startCheckoutRouter(routerData: StartCheckoutRequest | StartCheckoutIdRequest): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
+    const checkoutResult = await this.handleCheckoutRouter(routerData);
+    const payload = await this.init3DSRedirect(checkoutResult)
+    if(payload)
+      return checkoutResult;
+  }
+
+  async startCheckoutRouterFull(routerFullData: StartCheckoutFullRequest): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
+    
+    try {
+
+      const { 
+        order, 
+        total, 
+        customer, 
+        skyflowTokens, 
+        return_url, 
+        isSandbox, 
+        metadata, 
+        currency 
+      } = routerFullData;
+
+      const merchantResult = await this.getBusiness();
+
+      const customerResult : CustomerRegisterResponse | ErrorResponse = await this.customerRegister(customer.email);
+
+      if(customerResult && "auth_token" in customerResult && merchantResult && "reference" in merchantResult) {
+
+        const orderData: CreateOrderRequest = {
+          business: this.apiKeyTonder,
+          client: customerResult.auth_token,
+          billing_address_id: null,
+          shipping_address_id: null,
+          amount: total,
+          reference: merchantResult.reference,
+          is_oneclick: true,
+          items: order.items,
+        };
+
+        const orderResult = await this.createOrder(orderData);
+
+        const now = new Date();
+
+        const dateString = now.toISOString();
+
+        if("id" in orderResult && "id" in customerResult && "business" in merchantResult) {
+
+          const paymentItems: CreatePaymentRequest = {
+            business_pk: merchantResult.business.pk,
+            amount: total,
+            date: dateString,
+            order_id: orderResult.id,
+            client_id: customerResult.id
+          };
+
+          const paymentResult = await this.createPayment(
+            paymentItems
+          );
+
+          let deviceSessionIdTonder: any;
+
+          const { openpay_keys, business } = merchantResult
+
+          if (openpay_keys.merchant_id && openpay_keys.public_key) {
+            deviceSessionIdTonder = await this.getOpenpayDeviceSessionID(
+              openpay_keys.merchant_id,
+              openpay_keys.public_key,
+              isSandbox
+            );
+          }
+
+          const routerItems: StartCheckoutRequest = {
+            card: skyflowTokens,
+            name: customer.name,
+            last_name: customer.lastname,
+            email_client: customer.email,
+            phone_number: customer.phone,
+            return_url: return_url,
+            id_product: "no_id",
+            quantity_product: 1,
+            id_ship: "0",
+            instance_id_ship: "0",
+            amount: total,
+            title_ship: "shipping",
+            description: "transaction",
+            device_session_id: deviceSessionIdTonder ? deviceSessionIdTonder : null,
+            token_id: "",
+            order_id: ("id" in orderResult) && orderResult.id,
+            business_id: business.pk,
+            payment_id: ("pk" in paymentResult) && paymentResult.pk,
+            source: 'sdk',
+            metadata: metadata,
+            browser_info: getBrowserInfo(),
+            currency: currency
+          };
+
+          const checkoutResult = await this.handleCheckoutRouter(routerItems);
+          const payload = await this.init3DSRedirect(checkoutResult)
+          if(payload)
+            return checkoutResult;
+        } else {
+
+          throw new ErrorResponse({
+            code: "500",
+            body: orderResult as any,
+            name: "Keys error",
+            message: "Order response errors"
+          } as IErrorResponse)
+        
+        }
+      
+      } else {
+
+        throw new ErrorResponse({
+          code: "500",
+          body: merchantResult as any,
+          name: "Keys error",
+          message: "Merchant or customer reposne errors"
+        } as IErrorResponse)
+      
+      }
+    } catch (e) {
+      
+      throw this.buildErrorResponseFromCatch(e);
+    
+    }
+  }
+
+  async init3DSRedirect(checkoutResult: ErrorResponse | StartCheckoutResponse){
+    this.process3ds.setPayload(checkoutResult)
+    this.process3ds.saveCheckoutId(checkoutResult && 'checkout_id' in checkoutResult ? checkoutResult.checkout_id:"")
+    return await this.handle3dsRedirect(checkoutResult)
+  }
+
+  async getSkyflowTokens({
+    vault_id,
+    vault_url,
+    data,
+  }: TokensRequest): Promise<any | ErrorResponse> {
     const skyflow = Skyflow.init({
       vaultID: vault_id,
       vaultURL: vault_url,
@@ -137,79 +361,190 @@ export class LiteCheckout {
         env: Skyflow.Env.DEV,
       },
     });
-  
-    const collectContainer: any = skyflow.container(
+
+    const collectContainer: CollectContainer = skyflow.container(
       Skyflow.ContainerType.COLLECT
-    );
-  
-    const fields = await Promise.all(Object.keys(data).map(async (key) => {
-      const cardHolderNameElement = await collectContainer.create({
-        table: "cards",
-        column: key,
-        type: Skyflow.ElementType.INPUT_FIELD
-      });
-      return { element: cardHolderNameElement, key: key};
-    }))
-  
-    const fieldPromises: Promise<any>[] = fields.map((field) => {
-      return new Promise((resolve, reject) => {
-        const div = document.createElement("div")
-        div.hidden = true;
-        div.id = `id-${field.key}`
-        document.querySelector(`body`)?.appendChild(div);
-        setTimeout(() => {
-          field.element.mount(`#id-${field.key}`)
-          setInterval(() => {
-            if(field.element.isMounted()) {
-              const value = data[field.key];
-              field.element.update({ value: value });
-              return resolve(field.element.isMounted())
-            }
-          }, 120)
-        }, 120)
-      })
-    })
-    
-  
-    const result = await Promise.all(fieldPromises)
-  
-    const mountFail = result.find((item: boolean) => !item)
-  
-    if(mountFail) {
-      return { error: "Ocurrió un error al montar los campos de la tarjeta" }
+    ) as CollectContainer;
+
+    const fieldPromises = await this.getFieldsPromise(data, collectContainer);
+
+    const result = await Promise.all(fieldPromises);
+
+    const mountFail = result.some((item: boolean) => !item);
+
+    if (mountFail) {
+      throw this.buildErrorResponseFromCatch(Error("Ocurrió un error al montar los campos de la tarjeta"));
     } else {
       try {
-        const collectResponseSkyflowTonder = await collectContainer.collect();
-        return collectResponseSkyflowTonder["records"][0]["fields"];
+        const collectResponseSkyflowTonder = await collectContainer.collect() as any;
+        if (collectResponseSkyflowTonder) return collectResponseSkyflowTonder["records"][0]["fields"];
+        throw this.buildErrorResponseFromCatch(Error("Por favor, verifica todos los campos de tu tarjeta"))
       } catch (error) {
-        console.error("Por favor, verifica todos los campos de tu tarjeta")
-        return { error: "Por favor, verifica todos los campos de tu tarjeta" }
+        throw this.buildErrorResponseFromCatch(error);
       }
     }
-  
   }
 
-  async getVaultToken() {
-    const response = await fetch(`${this.baseUrlTonder}/api/v1/vault-token/`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Token ${this.apiKeyTonder}`
-      },
-      signal: this.signal,
-    });
-  
-    if (response.ok) {
-      const responseBody = await response.json();
-      return responseBody.token;
-    } else {
-      throw new Error('Failed to retrieve bearer token');
+  async getVaultToken(): Promise<string> {
+    try {
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/vault-token/`, {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${this.apiKeyTonder}`,
+        },
+        signal: this.signal,
+      });
+      if (response.ok) return (await response.json() as GetVaultTokenResponse)?.token;
+      throw new Error(`HTTPCODE: ${response.status}`)
+    } catch (e) {
+      throw new Error(`Failed to retrieve bearer token; ${typeof e == "string" ? e : (e as Error).message}`)
     }
   }
 
+  async getFieldsPromise(data: any, collectContainer: CollectContainer): Promise<Promise<boolean>[]> {
+    const fields = await this.getFields(data, collectContainer);
+    if (!fields) return [];
+
+    return fields.map((field: { element: CollectElement, key: string }) => {
+      return new Promise((resolve) => {
+        const div = document.createElement("div");
+        div.hidden = true;
+        div.id = `id-${field.key}`;
+        document.querySelector(`body`)?.appendChild(div);
+        setTimeout(() => {
+          field.element.mount(`#id-${field.key}`);
+          setInterval(() => {
+            if (field.element.isMounted()) {
+              const value = data[field.key];
+              field.element.update({ value: value });
+              return resolve(field.element.isMounted());
+            }
+          }, 120);
+        }, 120);
+      });
+    })
+  }
+
+  async registerCustomerCard(customerToken: string, data: RegisterCustomerCardRequest): Promise<RegisterCustomerCardResponse | ErrorResponse> {
+    try {
+      if(!this.merchantData){
+        await this.#fetchMerchantData()
+      }
+
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${customerToken}`,
+          'Content-Type': 'application/json'
+        },
+        signal: this.signal,
+        body: JSON.stringify({...data})
+      });
+
+      if (response.ok) return await response.json() as RegisterCustomerCardResponse;
+      throw await this.buildErrorResponse(response);
+    } catch (error) {
+      throw this.buildErrorResponseFromCatch(error);
+    }
+  }
+
+  async getCustomerCards(customerToken: string): Promise<GetCustomerCardsResponse | ErrorResponse> {
+    try {
+      if(!this.merchantData){
+        await this.#fetchMerchantData()
+      }
+
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Token ${customerToken}`,
+          'Content-Type': 'application/json'
+        },
+        signal: this.signal,
+      });
+
+      if (response.ok) return await response.json() as GetCustomerCardsResponse;
+      throw await this.buildErrorResponse(response);
+    } catch (error) {
+      throw this.buildErrorResponseFromCatch(error);
+    }
+  }
+
+  async deleteCustomerCard(customerToken: string, skyflowId: string = ""): Promise<Boolean | ErrorResponse> {
+    try {
+      if(!this.merchantData){
+        await this.#fetchMerchantData()
+      }
+
+      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/${skyflowId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Token ${customerToken}`,
+          'Content-Type': 'application/json'
+        },
+        signal: this.signal,
+      });
+
+      if (response.ok) return true;
+      throw await this.buildErrorResponse(response);
+    } catch (error) {
+      throw this.buildErrorResponseFromCatch(error);
+    }
+  }
+
+  private buildErrorResponseFromCatch(e: any): ErrorResponse {
+    
+    const error = new ErrorResponse({
+      code: e?.status ? e.status : e.code,
+      body: e?.body,
+      name: e ? typeof e == "string" ? "catch" : (e as Error).name : "Error",
+      message: e ? (typeof e == "string" ? e : (e as Error).message) : "Error",
+      stack: typeof e == "string" ? undefined : (e as Error).stack,
+    })
+
+    return error;
+  }
+
+  private async buildErrorResponse(
+    response: Response,
+    stack: string | undefined = undefined
+  ): Promise<ErrorResponse> {
+
+    let body, status, message = "Error";
+
+    if(response && "json" in response) {
+      body = await response?.json();
+    }
+
+    if(response && "status" in response) {
+      status = response.status.toString();
+    }
+
+    if(response && "text" in response) {
+      message = await response.text();
+    }
+
+    const error = new ErrorResponse({
+      code: status,
+      body: body,
+      name: status,
+      message: message,
+      stack,
+    } as IErrorResponse)
+    
+    return error;
+  }
+
+  private async getFields(data: any, collectContainer: CollectContainer): Promise<{ element: CollectElement, key: string }[]> {
+    return await Promise.all(
+      Object.keys(data).map(async (key) => {
+        const cardHolderNameElement = await collectContainer.create({
+          table: "cards",
+          column: key,
+          type: Skyflow.ElementType.INPUT_FIELD,
+        });
+        return { element: cardHolderNameElement, key: key };
+      })
+    )
+  }
 }
-
-
-
-
-
-
