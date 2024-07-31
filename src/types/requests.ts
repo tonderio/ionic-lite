@@ -46,6 +46,10 @@ export type StartCheckoutRequest = {
     currency: string
 }
 
+export type StartCheckoutIdRequest = { 
+    checkout_id: any
+}
+
 export interface VaultRequest extends SkyflowRecord {
     records: SkyflowRecord[],
     continueOnError?: boolean,

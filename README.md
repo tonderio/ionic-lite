@@ -28,6 +28,15 @@ const liteCheckout = new LiteCheckout({
   baseUrlTonder, 
   apiKeyTonder
 })
+
+// To verify a 3ds transaction you can use the following method
+// It should be called after the injectCheckout method
+// The response status will be one of the following
+// ['Declined', 'Cancelled', 'Failed', 'Success', 'Pending', 'Authorized']
+
+inlineCheckout.verify3dsTransaction().then(response => {
+  console.log('Verify 3ds response', response)
+})
 ```
 
 | Property        | Type          | Description                                                             |
