@@ -21,8 +21,7 @@ export type CreatePaymentRequest = {
     client_id?: string | number
 }
 
-export type StartCheckoutRequest = {
-    card: any,
+export type StartCheckoutRequestBase = {
     name: any,
     last_name: string,
     email_client: any,
@@ -43,8 +42,20 @@ export type StartCheckoutRequest = {
     source: string,
     browser_info?: any,
     metadata: any,
-    currency: string
+    currency: string,
 }
+
+export type StartCheckoutRequestWithCard = StartCheckoutRequestBase & {
+    card: any,
+    payment_method?: never,
+}
+
+export type StartCheckoutRequestWithPaymentMethod = StartCheckoutRequestBase & {
+    card?: never,
+    payment_method: string,
+}
+
+export type StartCheckoutRequest = StartCheckoutRequestWithCard | StartCheckoutRequestWithPaymentMethod;
 
 export type StartCheckoutIdRequest = { 
     checkout_id: any
@@ -91,4 +102,5 @@ export type StartCheckoutFullRequest = {
     isSandbox: boolean;
     metadata: any;
     currency: string;
+    payment_method?: string;
 }
