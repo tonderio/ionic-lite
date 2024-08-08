@@ -108,23 +108,33 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     const result3ds = await this.process3ds.verifyTransactionStatus()
     const resultCheckout = await this.resumeCheckout(result3ds)
     this.process3ds.setPayload(resultCheckout)
-    if (resultCheckout && 'is_route_finished' in resultCheckout && 'provider' in resultCheckout && resultCheckout.provider === 'tonder') {
-      return resultCheckout
-    }
     return this.handle3dsRedirect(resultCheckout)
   }
 
   async resumeCheckout(response: any) {
-    if (["Failed", "Declined", "Cancelled"].includes(response?.status)) {
-      const routerItems = {
-        checkout_id: response.checkout?.id,
-      };
-      const routerResponse = await this.handleCheckoutRouter(
-        routerItems
-      );
-      return routerResponse
+    // Stop the routing process if the transaction is either hard declined or successful
+    if (response?.decline?.error_type === "Hard") {
+      return response
     }
-    return response
+
+    if (["Success", "Authorized"].includes(response?.transaction_status)) {
+      return response;
+    }
+
+    if (response) {
+      const routerItems = {
+        checkout_id: response?.checkout?.id,
+      };
+      try {
+        const routerResponse = await this.handleCheckoutRouter(
+            routerItems
+        );
+        return routerResponse
+      }catch (error){
+        // throw error
+      }
+      return response
+    }
   }
 
   async handle3dsRedirect(response: ErrorResponse | StartCheckoutResponse | false | undefined) {
