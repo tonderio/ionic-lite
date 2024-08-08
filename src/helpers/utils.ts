@@ -35,7 +35,6 @@ const buildErrorResponse = async (
   response: Response,
   stack: string | undefined = undefined
 ): Promise<ErrorResponse> => {
-
   let body, status, message = "Error";
 
   if (response && "json" in response) {
@@ -46,10 +45,13 @@ const buildErrorResponse = async (
     status = response.status.toString();
   }
 
-  if (response && "text" in response) {
+  if (!body && response && "text" in response) {
     message = await response.text();
   }
 
+  if(body?.detail){
+    message = body.detail
+  }
   const error = new ErrorResponse({
     code: status,
     body: body,

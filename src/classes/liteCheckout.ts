@@ -1,3 +1,7 @@
+import {injectMercadoPagoSecurity} from "../helpers/mercadopago";
+
+declare const MP_DEVICE_SESSION_ID: string | undefined;
+
 import Skyflow from "skyflow-js";
 import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
 import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
@@ -41,7 +45,15 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       apiKey: this.apiKeyTonder, 
       baseUrl: this.baseUrlTonder,
     })
+    this.#init()
+  }
+
+  async #init(){
     this.getActiveAPMs()
+    const { mercado_pago } = await this.#fetchMerchantData() as Business
+    if (!!mercado_pago && mercado_pago.active){
+      injectMercadoPagoSecurity()
+    }
   }
 
   async getOpenpayDeviceSessionID(
@@ -63,7 +75,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
   }
   async #fetchMerchantData() {
     try {
-      this.merchantData = await this.getBusiness();
+      if (!this.merchantData){
+        this.merchantData = await this.getBusiness();
+      }
       return this.merchantData
     }catch(e){
       return this.merchantData
@@ -94,28 +108,37 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     const result3ds = await this.process3ds.verifyTransactionStatus()
     const resultCheckout = await this.resumeCheckout(result3ds)
     this.process3ds.setPayload(resultCheckout)
-    if (resultCheckout && 'is_route_finished' in resultCheckout && 'provider' in resultCheckout && resultCheckout.provider === 'tonder') {
-      return resultCheckout
-    }
     return this.handle3dsRedirect(resultCheckout)
   }
 
   async resumeCheckout(response: any) {
-    if (["Failed", "Declined", "Cancelled"].includes(response?.status)) {
-      const routerItems = {
-        checkout_id: response.checkout?.id,
-      };
-      const routerResponse = await this.handleCheckoutRouter(
-        routerItems
-      );
-      return routerResponse
+    // Stop the routing process if the transaction is either hard declined or successful
+    if (response?.decline?.error_type === "Hard") {
+      return response
     }
-    return response
+
+    if (["Success", "Authorized"].includes(response?.transaction_status)) {
+      return response;
+    }
+
+    if (response) {
+      const routerItems = {
+        checkout_id: response?.checkout?.id,
+      };
+      try {
+        const routerResponse = await this.handleCheckoutRouter(
+            routerItems
+        );
+        return routerResponse
+      }catch (error){
+        // throw error
+      }
+      return response
+    }
   }
 
   async handle3dsRedirect(response: ErrorResponse | StartCheckoutResponse | false | undefined) {
     const iframe = response && 'next_action' in response ? response?.next_action?.iframe_resources?.iframe:null
-
     if (iframe) {
       this.process3ds.loadIframe()!.then(() => {
         //TODO: Check if this will be necessary on the frontend side
@@ -206,7 +229,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
           "Content-Type": "application/json",
           Authorization: `Token ${this.apiKeyTonder}`,
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({...data, ...(typeof MP_DEVICE_SESSION_ID !== "undefined" ? {mp_device_session_id: MP_DEVICE_SESSION_ID}:{})}),
       });
       if (response.ok) return await response.json() as StartCheckoutResponse;
       throw await buildErrorResponse(response);
@@ -312,7 +335,8 @@ export class LiteCheckout implements LiteCheckoutConstructor {
             ...( !!payment_method
               ? {payment_method}
               : {card: skyflowTokens}
-            )
+            ),
+            ...(typeof MP_DEVICE_SESSION_ID !== "undefined" ? {mp_device_session_id: MP_DEVICE_SESSION_ID}:{})
           };
 
           const checkoutResult = await this.handleCheckoutRouter(routerItems);
@@ -432,9 +456,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
   async registerCustomerCard(customerToken: string, data: RegisterCustomerCardRequest): Promise<RegisterCustomerCardResponse | ErrorResponse> {
     try {
-      if(!this.merchantData){
-        await this.#fetchMerchantData()
-      }
+      await this.#fetchMerchantData()
 
       const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/`, {
         method: 'POST',
@@ -455,9 +477,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
   async getCustomerCards(customerToken: string): Promise<GetCustomerCardsResponse | ErrorResponse> {
     try {
-      if(!this.merchantData){
-        await this.#fetchMerchantData()
-      }
+      await this.#fetchMerchantData()
 
       const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards`, {
         method: 'GET',
@@ -477,10 +497,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
   async deleteCustomerCard(customerToken: string, skyflowId: string = ""): Promise<Boolean | ErrorResponse> {
     try {
-      if(!this.merchantData){
-        await this.#fetchMerchantData()
-      }
-
+      await this.#fetchMerchantData()
       const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/${skyflowId}`, {
         method: 'DELETE',
         headers: {
