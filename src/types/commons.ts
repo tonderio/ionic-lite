@@ -23,6 +23,9 @@ export type Business = {
     fintoc_keys: {
         public_key: string;
     };
+    mercado_pago: {
+        active: boolean;
+    };
     vault_id: string;
     vault_url: string;
     reference: number;

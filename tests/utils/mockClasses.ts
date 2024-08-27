@@ -39,6 +39,7 @@ export class BusinessClass implements Business {
     vault_url!: string;
     reference!: number;
     is_installments_available!: boolean;
+    mercado_pago!: { active: boolean}
 
     get mockObject(): GetBusinessResponse {
         return {
@@ -58,6 +59,9 @@ export class BusinessClass implements Business {
                 textCheckoutColor: '#333333',
                 textDetailsColor: '#666666',
                 checkout_logo: 'assets/images/checkout-logo.png',
+            },
+            mercado_pago: {
+              active: false
             },
             vault_id: 'mock-vault-id-123',
             vault_url: 'https://mock-vault.com',
