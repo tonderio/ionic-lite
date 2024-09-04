@@ -1,7 +1,7 @@
 import "../utils/defaultMock";
 import { LiteCheckout } from "../../src";
-import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
 import { constructorFields } from "../utils/defaultMock";
+import {IInlineLiteCheckoutOptions} from "../../src/types/commons";
 
 declare global {
     interface Window {
@@ -11,7 +11,7 @@ declare global {
 }
 
 describe("LiteCheckout", () => {
-    let checkoutConstructor: LiteCheckoutConstructor,
+    let checkoutConstructor: IInlineLiteCheckoutOptions,
         liteCheckout: LiteCheckout,
         fetchSpy: jest.SpyInstance,
         liteCheckoutSpy: jest.SpyInstance;
@@ -38,9 +38,9 @@ describe("LiteCheckout", () => {
 
     it("Can instance LiteCheckout", () => {
         expect(liteCheckout).toBeInstanceOf(LiteCheckout);
-        expect(liteCheckout.apiKeyTonder).toEqual(constructorFields.apiKeyTonder);
-        expect(liteCheckout.baseUrlTonder).toEqual(constructorFields.baseUrlTonder);
-        expect(liteCheckout.signal).toEqual(constructorFields.signal);
+        expect(liteCheckout.apiKeyTonder).toEqual(constructorFields.apiKey);
+        expect(liteCheckout.baseUrl).toEqual(constructorFields.baseUrl);
+        expect(liteCheckout.abortController.signal).toEqual(constructorFields.signal);
     });
 
 
