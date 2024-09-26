@@ -52,7 +52,7 @@ describe("getCustomerCards", () => {
 
         expect(response).toStrictEqual({ ...new GetCustomerCardsResponseClass() });
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(liteCheckoutSpy).toHaveBeenCalledWith("1234", "1234");
+        expect(liteCheckoutSpy).toHaveBeenCalledWith("1234");
     });
 
     it("getCustomerCards empty", async () => {
