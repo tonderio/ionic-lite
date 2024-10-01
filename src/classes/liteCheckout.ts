@@ -1,12 +1,17 @@
+import {injectMercadoPagoSecurity} from "../helpers/mercadopago";
+
+declare const MP_DEVICE_SESSION_ID: string | undefined;
+
 import Skyflow from "skyflow-js";
 import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
 import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
-import { Business } from "../types/commons";
+import { APM, Business, TonderAPM } from "../types/commons";
 import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest, StartCheckoutFullRequest, StartCheckoutIdRequest } from "../types/requests";
-import { GetBusinessResponse, CustomerRegisterResponse, CreateOrderResponse, CreatePaymentResponse, StartCheckoutResponse, GetVaultTokenResponse, IErrorResponse, GetCustomerCardsResponse, RegisterCustomerCardResponse } from "../types/responses";
+import { GetSecureTokenResponse, GetBusinessResponse, CustomerRegisterResponse, CreateOrderResponse, CreatePaymentResponse, StartCheckoutResponse, GetVaultTokenResponse, IErrorResponse, GetCustomerCardsResponse, RegisterCustomerCardResponse } from "../types/responses";
 import { ErrorResponse } from "./errorResponse";
-import { getBrowserInfo, getBusinessId } from "../helpers/utils";
+import { buildErrorResponse, buildErrorResponseFromCatch, getBrowserInfo, getPaymentMethodDetails, getBusinessId } from "../helpers/utils";
 import { ThreeDSHandler } from "./3dsHandler";
+import { getCustomerAPMs } from "../data/api";
 
 declare global {
   interface Window {
@@ -17,28 +22,38 @@ declare global {
 export type LiteCheckoutConstructor = {
   signal: AbortSignal;
   baseUrlTonder: string;
-  apiKeyTonder: string;
+  publicApiKeyTonder: string;
 };
 
 export class LiteCheckout implements LiteCheckoutConstructor {
   signal: AbortSignal;
   baseUrlTonder: string;
-  apiKeyTonder: string;
+  publicApiKeyTonder: string;
   process3ds: ThreeDSHandler;
+  activeAPMs: APM[] = []
   merchantData?: Business | ErrorResponse;
 
   constructor({
     signal,
     baseUrlTonder,
-    apiKeyTonder,
+    publicApiKeyTonder,
   }: LiteCheckoutConstructor) {
     this.baseUrlTonder = baseUrlTonder;
     this.signal = signal;
-    this.apiKeyTonder = apiKeyTonder;
+    this.publicApiKeyTonder = publicApiKeyTonder;
     this.process3ds = new ThreeDSHandler({ 
-      apiKey: this.apiKeyTonder, 
-      baseUrl: this.baseUrlTonder, 
+      apiKey: this.publicApiKeyTonder, 
+      baseUrl: this.baseUrlTonder,
     })
+    this.#init()
+  }
+
+  async #init(){
+    this.getActiveAPMs()
+    const { mercado_pago } = await this.#fetchMerchantData() as Business
+    if (!!mercado_pago && mercado_pago.active){
+      injectMercadoPagoSecurity()
+    }
   }
 
   async getOpenpayDeviceSessionID(
@@ -55,12 +70,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         signal: this.signal,
       }) as string;
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
   async #fetchMerchantData() {
     try {
-      this.merchantData = await this.getBusiness();
+      if (!this.merchantData){
+        this.merchantData = await this.getBusiness();
+      }
       return this.merchantData
     }catch(e){
       return this.merchantData
@@ -70,10 +87,10 @@ export class LiteCheckout implements LiteCheckoutConstructor {
   async getBusiness(): Promise<GetBusinessResponse | ErrorResponse> {
     try {
       const getBusiness = await fetch(
-        `${this.baseUrlTonder}/api/v1/payments/business/${this.apiKeyTonder}`,
+        `${this.baseUrlTonder}/api/v1/payments/business/${this.publicApiKeyTonder}`,
         {
           headers: {
-            Authorization: `Token ${this.apiKeyTonder}`,
+            Authorization: `Token ${this.publicApiKeyTonder}`,
           },
           signal: this.signal,
         }
@@ -81,9 +98,9 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
       if (getBusiness.ok) return (await getBusiness.json()) as Business;
 
-      throw await this.buildErrorResponse(getBusiness);
+      throw await buildErrorResponse(getBusiness);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
 
@@ -91,29 +108,37 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     const result3ds = await this.process3ds.verifyTransactionStatus()
     const resultCheckout = await this.resumeCheckout(result3ds)
     this.process3ds.setPayload(resultCheckout)
-    if (resultCheckout && 'is_route_finished' in resultCheckout && 'provider' in resultCheckout && resultCheckout.provider === 'tonder') {
-      return resultCheckout
-    }
     return this.handle3dsRedirect(resultCheckout)
   }
 
   async resumeCheckout(response: any) {
-    if (["Failed", "Declined", "Cancelled"].includes(response?.status)) {
-      const routerItems = {
-        // TODO: Replace this with reponse.checkout_id
-        checkout_id: this.process3ds.getCurrentCheckoutId(),
-      };
-      const routerResponse = await this.handleCheckoutRouter(
-        routerItems
-      );
-      return routerResponse
+    // Stop the routing process if the transaction is either hard declined or successful
+    if (response?.decline?.error_type === "Hard") {
+      return response
     }
-    return response
+
+    if (["Success", "Authorized"].includes(response?.transaction_status)) {
+      return response;
+    }
+
+    if (response) {
+      const routerItems = {
+        checkout_id: response?.checkout?.id,
+      };
+      try {
+        const routerResponse = await this.handleCheckoutRouter(
+            routerItems
+        );
+        return routerResponse
+      }catch (error){
+        // throw error
+      }
+      return response
+    }
   }
 
   async handle3dsRedirect(response: ErrorResponse | StartCheckoutResponse | false | undefined) {
     const iframe = response && 'next_action' in response ? response?.next_action?.iframe_resources?.iframe:null
-
     if (iframe) {
       this.process3ds.loadIframe()!.then(() => {
         //TODO: Check if this will be necessary on the frontend side
@@ -144,16 +169,16 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Token ${this.apiKeyTonder}`,
+          Authorization: `Token ${this.publicApiKeyTonder}`,
         },
         signal: this.signal,
         body: JSON.stringify(data),
       });
 
       if (response.ok) return await response.json() as CustomerRegisterResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
 
@@ -165,14 +190,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Token ${this.apiKeyTonder}`,
+          Authorization: `Token ${this.publicApiKeyTonder}`,
         },
         body: JSON.stringify(data),
       });
       if (response.ok) return await response.json() as CreateOrderResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
 
@@ -184,14 +209,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Token ${this.apiKeyTonder}`,
+          Authorization: `Token ${this.publicApiKeyTonder}`,
         },
         body: JSON.stringify(data),
       });
       if (response.ok) return await response.json() as CreatePaymentResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
   async handleCheckoutRouter(routerData: StartCheckoutRequest | StartCheckoutIdRequest){
@@ -202,14 +227,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Token ${this.apiKeyTonder}`,
+          Authorization: `Token ${this.publicApiKeyTonder}`,
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({...data, ...(typeof MP_DEVICE_SESSION_ID !== "undefined" ? {mp_device_session_id: MP_DEVICE_SESSION_ID}:{})}),
       });
       if (response.ok) return await response.json() as StartCheckoutResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (e) {
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     }
   }
 
@@ -232,7 +257,8 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         return_url, 
         isSandbox, 
         metadata, 
-        currency 
+        currency,
+        payment_method
       } = routerFullData;
 
       const merchantResult = await this.getBusiness();
@@ -242,7 +268,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       if(customerResult && "auth_token" in customerResult && merchantResult && "reference" in merchantResult) {
 
         const orderData: CreateOrderRequest = {
-          business: this.apiKeyTonder,
+          business: this.publicApiKeyTonder,
           client: customerResult.auth_token,
           billing_address_id: null,
           shipping_address_id: null,
@@ -285,7 +311,6 @@ export class LiteCheckout implements LiteCheckoutConstructor {
           }
 
           const routerItems: StartCheckoutRequest = {
-            card: skyflowTokens,
             name: customer.name,
             last_name: customer.lastname,
             email_client: customer.email,
@@ -306,7 +331,12 @@ export class LiteCheckout implements LiteCheckoutConstructor {
             source: 'sdk',
             metadata: metadata,
             browser_info: getBrowserInfo(),
-            currency: currency
+            currency: currency,
+            ...( !!payment_method
+              ? {payment_method}
+              : {card: skyflowTokens}
+            ),
+            ...(typeof MP_DEVICE_SESSION_ID !== "undefined" ? {mp_device_session_id: MP_DEVICE_SESSION_ID}:{})
           };
 
           const checkoutResult = await this.handleCheckoutRouter(routerItems);
@@ -336,14 +366,13 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       }
     } catch (e) {
       
-      throw this.buildErrorResponseFromCatch(e);
+      throw buildErrorResponseFromCatch(e);
     
     }
   }
 
   async init3DSRedirect(checkoutResult: ErrorResponse | StartCheckoutResponse){
     this.process3ds.setPayload(checkoutResult)
-    this.process3ds.saveCheckoutId(checkoutResult && 'checkout_id' in checkoutResult ? checkoutResult.checkout_id:"")
     return await this.handle3dsRedirect(checkoutResult)
   }
 
@@ -373,14 +402,14 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     const mountFail = result.some((item: boolean) => !item);
 
     if (mountFail) {
-      throw this.buildErrorResponseFromCatch(Error("Ocurrió un error al montar los campos de la tarjeta"));
+      throw buildErrorResponseFromCatch(Error("Ocurrió un error al montar los campos de la tarjeta"));
     } else {
       try {
         const collectResponseSkyflowTonder = await collectContainer.collect() as any;
         if (collectResponseSkyflowTonder) return collectResponseSkyflowTonder["records"][0]["fields"];
-        throw this.buildErrorResponseFromCatch(Error("Por favor, verifica todos los campos de tu tarjeta"))
+        throw buildErrorResponseFromCatch(Error("Por favor, verifica todos los campos de tu tarjeta"))
       } catch (error) {
-        throw this.buildErrorResponseFromCatch(error);
+        throw buildErrorResponseFromCatch(error);
       }
     }
   }
@@ -390,7 +419,7 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       const response = await fetch(`${this.baseUrlTonder}/api/v1/vault-token/`, {
         method: "GET",
         headers: {
-          Authorization: `Token ${this.apiKeyTonder}`,
+          Authorization: `Token ${this.publicApiKeyTonder}`,
         },
         signal: this.signal,
       });
@@ -425,16 +454,15 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     })
   }
 
-  async registerCustomerCard(customerToken: string, data: RegisterCustomerCardRequest): Promise<RegisterCustomerCardResponse | ErrorResponse> {
+  async registerCustomerCard(secureToken: string, customerToken: string, data: RegisterCustomerCardRequest): Promise<RegisterCustomerCardResponse | ErrorResponse> {
     try {
-      if(!this.merchantData){
-        await this.#fetchMerchantData()
-      }
+      await this.#fetchMerchantData()
 
       const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/`, {
         method: 'POST',
         headers: {
-          'Authorization': `Token ${customerToken}`,
+          'Authorization': `Bearer ${secureToken}`,
+          'User-token': customerToken,
           'Content-Type': 'application/json'
         },
         signal: this.signal,
@@ -442,40 +470,37 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return await response.json() as RegisterCustomerCardResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (error) {
-      throw this.buildErrorResponseFromCatch(error);
+      throw buildErrorResponseFromCatch(error);
     }
   }
 
-  async getCustomerCards(customerToken: string): Promise<GetCustomerCardsResponse | ErrorResponse> {
+  async getCustomerCards(customerToken: string, bearerToken: string): Promise<GetCustomerCardsResponse | ErrorResponse> {
     try {
-      if(!this.merchantData){
-        await this.#fetchMerchantData()
-      }
+      await this.#fetchMerchantData()
 
       const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards`, {
         method: 'GET',
         headers: {
-          'Authorization': `Token ${customerToken}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${bearerToken}`,
+          'User-Token': customerToken,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         signal: this.signal,
       });
 
       if (response.ok) return await response.json() as GetCustomerCardsResponse;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (error) {
-      throw this.buildErrorResponseFromCatch(error);
+      throw buildErrorResponseFromCatch(error);
     }
   }
 
   async deleteCustomerCard(customerToken: string, skyflowId: string = ""): Promise<Boolean | ErrorResponse> {
     try {
-      if(!this.merchantData){
-        await this.#fetchMerchantData()
-      }
-
+      await this.#fetchMerchantData()
       const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/${skyflowId}`, {
         method: 'DELETE',
         headers: {
@@ -486,53 +511,10 @@ export class LiteCheckout implements LiteCheckoutConstructor {
       });
 
       if (response.ok) return true;
-      throw await this.buildErrorResponse(response);
+      throw await buildErrorResponse(response);
     } catch (error) {
-      throw this.buildErrorResponseFromCatch(error);
+      throw buildErrorResponseFromCatch(error);
     }
-  }
-
-  private buildErrorResponseFromCatch(e: any): ErrorResponse {
-    
-    const error = new ErrorResponse({
-      code: e?.status ? e.status : e.code,
-      body: e?.body,
-      name: e ? typeof e == "string" ? "catch" : (e as Error).name : "Error",
-      message: e ? (typeof e == "string" ? e : (e as Error).message) : "Error",
-      stack: typeof e == "string" ? undefined : (e as Error).stack,
-    })
-
-    return error;
-  }
-
-  private async buildErrorResponse(
-    response: Response,
-    stack: string | undefined = undefined
-  ): Promise<ErrorResponse> {
-
-    let body, status, message = "Error";
-
-    if(response && "json" in response) {
-      body = await response?.json();
-    }
-
-    if(response && "status" in response) {
-      status = response.status.toString();
-    }
-
-    if(response && "text" in response) {
-      message = await response.text();
-    }
-
-    const error = new ErrorResponse({
-      code: status,
-      body: body,
-      name: status,
-      message: message,
-      stack,
-    } as IErrorResponse)
-    
-    return error;
   }
 
   private async getFields(data: any, collectContainer: CollectContainer): Promise<{ element: CollectElement, key: string }[]> {
@@ -546,5 +528,48 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         return { element: cardHolderNameElement, key: key };
       })
     )
+  }
+
+  async getActiveAPMs(): Promise<APM[]> {
+    try {
+      const apms_response = await getCustomerAPMs(this.baseUrlTonder, this.publicApiKeyTonder);
+      const apms_results = apms_response && apms_response['results'] && apms_response['results'].length > 0 ? apms_response['results'] : []
+      this.activeAPMs = apms_results
+        .filter((apmItem: TonderAPM) =>
+          apmItem.category.toLowerCase() !== 'cards')
+        .map((apmItem: TonderAPM) => {
+          const apm: APM = {
+            id: apmItem.pk,
+            payment_method: apmItem.payment_method,
+            priority: apmItem.priority,
+            category: apmItem.category,
+            ...getPaymentMethodDetails(apmItem.payment_method,)
+          }
+          return apm;
+        }).sort((a: APM, b: APM) => a.priority - b.priority);
+
+      return this.activeAPMs
+    } catch (e) {
+      console.error("Error getting APMS", e);
+      return [];
+    }
+  }
+
+  async getSecureToken(token: string): Promise<GetSecureTokenResponse | ErrorResponse> {
+    try {
+      const response = await fetch(`${this.baseUrlTonder}/api/secure-token/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json'
+        },
+        signal: this.signal,
+      });
+
+      if (response.ok) return await response.json() as GetSecureTokenResponse;
+      throw await buildErrorResponse(response);
+    } catch (error) {
+      throw buildErrorResponseFromCatch(error);
+    }
   }
 }

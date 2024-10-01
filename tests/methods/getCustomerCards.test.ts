@@ -48,11 +48,11 @@ describe("getCustomerCards", () => {
             })
         );
 
-        const response = await liteCheckout.getCustomerCards("1234");
+        const response = await liteCheckout.getCustomerCards("1234", "123456");
 
         expect(response).toStrictEqual({ ...new GetCustomerCardsResponseClass() });
         expect(liteCheckoutSpy).toHaveBeenCalled();
-        expect(liteCheckoutSpy).toHaveBeenCalledWith("1234");
+        expect(liteCheckoutSpy).toHaveBeenCalledWith("1234", "123456");
     });
 
     it("getCustomerCards empty", async () => {
@@ -65,7 +65,7 @@ describe("getCustomerCards", () => {
             })
         );
 
-        const response = await liteCheckout.getCustomerCards("1234");
+        const response = await liteCheckout.getCustomerCards("1234", "123456");
         expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(liteCheckoutSpy).toHaveReturned();
         expect(response).toBeUndefined();
@@ -86,7 +86,8 @@ describe("getCustomerCards", () => {
 
         try {
             const response = (await liteCheckout.getCustomerCards(
-                "1234"
+                "1234", 
+                "123456"
             )) as IErrorResponse;
         } catch (e: any) {
             error = e;
@@ -104,7 +105,8 @@ describe("getCustomerCards", () => {
 
         try {
             const response = (await liteCheckout.getCustomerCards(
-                "1234"
+                "1234",
+                "123456"
             )) as IErrorResponse;
         } catch (e: any) {
             error = e;
