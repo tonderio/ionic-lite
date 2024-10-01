@@ -17,5 +17,5 @@ const abortSignal = new AbortController().signal;
 export const constructorFields = {
     signal: abortSignal,
     baseUrlTonder: "",
-    apiKeyTonder: "",
+    publicApiKeyTonder: "",
 };

@@ -26,7 +26,7 @@ import { LiteCheckout } from "@tonder.io/ionic-lite-sdk"
 const liteCheckout = new LiteCheckout({ 
   signal, 
   baseUrlTonder, 
-  apiKeyTonder
+  publicApiKeyTonder
 })
 
 // To verify a 3ds transaction you can use the following method
@@ -44,7 +44,7 @@ inlineCheckout.verify3dsTransaction().then(response => {
 | signal          | AborSignal    | Signal from AbortController instance if it need cancel request          |
 | baseUrlTonder   | string        | Live server: http://stage.tonder.io                                     |
 |                 |               | Mock Server: https://stoplight.io/mocks/tonder/tonder-api-v1-2/3152148  |
-| apiKeyTonder    | string        | You can take this from you Tonder Dashboard                             |
+| publicApiKeyTonder    | string        | You can take this from you Tonder Dashboard                             |
 |                 |               |                                                                         |
 
 # Class methods
@@ -127,6 +127,24 @@ const jsonResponseRouter: any = await liteCheckout.startCheckoutRouterFull(
 
 # Customer Cards(Register)
 
+## Request secure token
+
+```typescript
+
+const jsonResponse = await liteCheckout.getSecureToken(
+  secretApiKey //You can take this from you Tonder Dashboard 
+);
+
+```
+
+## Return secure token
+
+```typescript
+{
+    access: string;
+}
+```
+
 ## Register customer card
 
 ```typescript
@@ -138,6 +156,7 @@ data: {
 };
 
 const jsonResponseOrder = await liteCheckout.registerCustomerCard(
+  secureToken
   customer_auth_token,
   data
 );

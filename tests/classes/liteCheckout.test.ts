@@ -38,7 +38,7 @@ describe("LiteCheckout", () => {
 
     it("Can instance LiteCheckout", () => {
         expect(liteCheckout).toBeInstanceOf(LiteCheckout);
-        expect(liteCheckout.apiKeyTonder).toEqual(constructorFields.apiKeyTonder);
+        expect(liteCheckout.publicApiKeyTonder).toEqual(constructorFields.publicApiKeyTonder);
         expect(liteCheckout.baseUrlTonder).toEqual(constructorFields.baseUrlTonder);
         expect(liteCheckout.signal).toEqual(constructorFields.signal);
     });

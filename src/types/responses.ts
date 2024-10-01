@@ -187,3 +187,7 @@ export type RegisterCustomerCardResponse = {
     skyflow_id: string;
     user_id: number;
 };
+
+export type GetSecureTokenResponse = {
+    access: string
+}
