@@ -1,10 +1,9 @@
 import "../utils/defaultMock";
 import { LiteCheckout } from "../../src";
 import { ErrorResponse } from "../../src/classes/errorResponse";
-import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
-import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
 import { GetCustomerCardsResponseClass } from "../utils/mockClasses";
+import {IInlineLiteCheckoutOptions} from "../../src/types/commons";
 
 declare global {
     interface Window {
@@ -14,7 +13,7 @@ declare global {
 }
 
 describe("getCustomerCards", () => {
-    let checkoutConstructor: LiteCheckoutConstructor,
+    let checkoutConstructor: IInlineLiteCheckoutOptions,
         liteCheckout: LiteCheckout,
         fetchSpy: jest.SpyInstance,
         liteCheckoutSpy: jest.SpyInstance;
@@ -48,7 +47,7 @@ describe("getCustomerCards", () => {
             })
         );
 
-        const response = await liteCheckout.getCustomerCards("1234");
+        const response = await liteCheckout.getCustomerCards();
 
         expect(response).toStrictEqual({ ...new GetCustomerCardsResponseClass() });
         expect(liteCheckoutSpy).toHaveBeenCalled();
@@ -65,7 +64,7 @@ describe("getCustomerCards", () => {
             })
         );
 
-        const response = await liteCheckout.getCustomerCards("1234");
+        const response = await liteCheckout.getCustomerCards();
         expect(liteCheckoutSpy).toHaveBeenCalled();
         expect(liteCheckoutSpy).toHaveReturned();
         expect(response).toBeUndefined();
@@ -85,9 +84,7 @@ describe("getCustomerCards", () => {
         let error: ErrorResponse;
 
         try {
-            const response = (await liteCheckout.getCustomerCards(
-                "1234"
-            )) as IErrorResponse;
+            const response = (await liteCheckout.getCustomerCards());
         } catch (e: any) {
             error = e;
             expect(error.code).toStrictEqual("400");
@@ -103,9 +100,7 @@ describe("getCustomerCards", () => {
         let error: ErrorResponse;
 
         try {
-            const response = (await liteCheckout.getCustomerCards(
-                "1234"
-            )) as IErrorResponse;
+            const response = (await liteCheckout.getCustomerCards());
         } catch (e: any) {
             error = e;
             expect(error.message).toStrictEqual("error");
