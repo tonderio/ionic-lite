@@ -1,17 +1,40 @@
-import {injectMercadoPagoSecurity} from "../helpers/mercadopago";
+import { fetchBusiness } from "../data/businessApi";
 
 declare const MP_DEVICE_SESSION_ID: string | undefined;
-
-import Skyflow from "skyflow-js";
-import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
-import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
-import { APM, Business, TonderAPM } from "../types/commons";
-import { CreateOrderRequest, CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutRequest, TokensRequest, StartCheckoutFullRequest, StartCheckoutIdRequest } from "../types/requests";
-import { GetBusinessResponse, CustomerRegisterResponse, CreateOrderResponse, CreatePaymentResponse, StartCheckoutResponse, GetVaultTokenResponse, IErrorResponse, GetCustomerCardsResponse, RegisterCustomerCardResponse } from "../types/responses";
 import { ErrorResponse } from "./errorResponse";
-import { buildErrorResponse, buildErrorResponseFromCatch, getBrowserInfo, getPaymentMethodDetails, getBusinessId } from "../helpers/utils";
-import { ThreeDSHandler } from "./3dsHandler";
+import {
+  buildErrorResponse,
+  buildErrorResponseFromCatch,
+  getBrowserInfo,
+  getBusinessId,
+  formatPublicErrorResponse,
+  getCardType,
+} from "../helpers/utils";
 import { getCustomerAPMs } from "../data/api";
+import { BaseInlineCheckout } from "./BaseInlineCheckout";
+import { MESSAGES } from "../shared/constants/messages";
+import { getSkyflowTokens } from "../helpers/skyflow";
+import { startCheckoutRouter } from "../data/checkoutApi";
+import { getOpenpayDeviceSessionID } from "../data/openPayApi";
+import { getPaymentMethodDetails } from "../shared/catalog/paymentMethodsCatalog";
+import {APM, IInlineLiteCheckoutOptions, TonderAPM} from "../types/commons";
+import {ICustomerCardsResponse, ISaveCardRequest, ISaveCardResponse, ISaveCardSkyflowRequest} from "../types/card";
+import {IPaymentMethod} from "../types/paymentMethod";
+import {
+  CreateOrderResponse,
+  CreatePaymentResponse,
+  CustomerRegisterResponse,
+  GetBusinessResponse, IErrorResponse, RegisterCustomerCardResponse, StartCheckoutResponse
+} from "../types/responses";
+import {
+  CreateOrderRequest,
+  CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutFullRequest,
+  StartCheckoutIdRequest,
+  StartCheckoutRequest,
+  TokensRequest
+} from "../types/requests";
+import {ICardFields, IStartCheckoutResponse} from "../types/checkout";
+import {ILiteCheckout} from "../types/liteInlineCheckout";
 
 declare global {
   interface Window {
@@ -19,151 +42,227 @@ declare global {
   }
 }
 
-export type LiteCheckoutConstructor = {
-  signal: AbortSignal;
-  baseUrlTonder: string;
-  apiKeyTonder: string;
-};
+export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
+  activeAPMs: APM[] = [];
 
-export class LiteCheckout implements LiteCheckoutConstructor {
-  signal: AbortSignal;
-  baseUrlTonder: string;
-  apiKeyTonder: string;
-  process3ds: ThreeDSHandler;
-  activeAPMs: APM[] = []
-  merchantData?: Business | ErrorResponse;
-
-  constructor({
-    signal,
-    baseUrlTonder,
-    apiKeyTonder,
-  }: LiteCheckoutConstructor) {
-    this.baseUrlTonder = baseUrlTonder;
-    this.signal = signal;
-    this.apiKeyTonder = apiKeyTonder;
-    this.process3ds = new ThreeDSHandler({ 
-      apiKey: this.apiKeyTonder, 
-      baseUrl: this.baseUrlTonder,
-    })
-    this.#init()
+  constructor({ apiKey, mode, returnUrl, callBack, apiKeyTonder, baseUrlTonder }: IInlineLiteCheckoutOptions) {
+    super({ mode, apiKey, returnUrl, callBack, apiKeyTonder, baseUrlTonder });
   }
 
-  async #init(){
-    this.getActiveAPMs()
-    const { mercado_pago } = await this.#fetchMerchantData() as Business
-    if (!!mercado_pago && mercado_pago.active){
-      injectMercadoPagoSecurity()
+  public async injectCheckout() {
+    await this._initializeCheckout();
+  }
+
+  public async getCustomerCards(): Promise<ICustomerCardsResponse> {
+    try {
+      await this._fetchMerchantData();
+      const { auth_token } = await this._getCustomer();
+      const response = await this._getCustomerCards(
+        auth_token,
+        this.merchantData!.business.pk,
+      );
+
+      return {
+        ...response,
+        cards: response.cards.map((ic) => ({
+          ...ic,
+          icon: getCardType(ic.fields.card_scheme),
+        })),
+      };
+    } catch (error) {
+      throw formatPublicErrorResponse(
+        {
+          message: MESSAGES.getCardsError,
+        },
+        error,
+      );
     }
   }
 
+  public async saveCustomerCard(
+    card: ISaveCardRequest,
+  ): Promise<ISaveCardResponse> {
+    try {
+      await this._fetchMerchantData();
+      const { auth_token } = await this._getCustomer();
+      const { vault_id, vault_url, business } = this.merchantData!;
+
+      const skyflowTokens: ISaveCardSkyflowRequest = await getSkyflowTokens({
+        vault_id: vault_id,
+        vault_url: vault_url,
+        data: card,
+        baseUrl: this.baseUrl,
+        apiKey: this.apiKeyTonder,
+      });
+
+      return await this._saveCustomerCard(
+        auth_token,
+        business?.pk,
+        skyflowTokens,
+      );
+    } catch (error) {
+      throw formatPublicErrorResponse(
+        {
+          message: MESSAGES.saveCardError,
+        },
+        error,
+      );
+    }
+  }
+
+  public async removeCustomerCard(skyflowId: string): Promise<string> {
+    try {
+      await this._fetchMerchantData();
+      const { auth_token } = await this._getCustomer();
+      const { business } = this.merchantData!;
+
+      return await this._removeCustomerCard(
+        auth_token,
+        business?.pk,
+        skyflowId,
+      );
+    } catch (error) {
+      throw formatPublicErrorResponse(
+        {
+          message: MESSAGES.removeCardError,
+        },
+        error,
+      );
+    }
+  }
+
+  public async getCustomerPaymentMethods(): Promise<IPaymentMethod[]> {
+    try {
+      const response = await this._fetchCustomerPaymentMethods();
+
+      const apms_results =
+        response && "results" in response && response["results"].length > 0
+          ? response["results"]
+          : [];
+
+      return apms_results
+        .filter((apmItem) => apmItem.category.toLowerCase() !== "cards")
+        .map((apmItem) => {
+          const apm = {
+            id: apmItem.pk,
+            payment_method: apmItem.payment_method,
+            priority: apmItem.priority,
+            category: apmItem.category,
+            ...getPaymentMethodDetails(apmItem.payment_method),
+          };
+          return apm;
+        })
+        .sort((a, b) => a.priority - b.priority);
+    } catch (error) {
+      throw formatPublicErrorResponse(
+        {
+          message: MESSAGES.getPaymentMethodsError,
+        },
+        error,
+      );
+    }
+  }
+
+  public async getBusiness(): Promise<GetBusinessResponse> {
+    try {
+      return await fetchBusiness(
+        this.baseUrl,
+        this.apiKeyTonder,
+        this.abortController.signal,
+      );
+    } catch (e) {
+      throw formatPublicErrorResponse(
+        {
+          message: MESSAGES.getBusinessError,
+        },
+        e,
+      );
+    }
+  }
+
+  // TODO: DEPRECATED
   async getOpenpayDeviceSessionID(
     merchant_id: string,
     public_key: string,
-    is_sandbox: boolean
+    is_sandbox: boolean,
   ): Promise<string | ErrorResponse> {
     try {
-      let openpay = await window.OpenPay;
-      openpay.setId(merchant_id);
-      openpay.setApiKey(public_key);
-      openpay.setSandboxMode(is_sandbox);
-      return await openpay.deviceData.setup({
-        signal: this.signal,
-      }) as string;
-    } catch (e) {
-      throw buildErrorResponseFromCatch(e);
-    }
-  }
-  async #fetchMerchantData() {
-    try {
-      if (!this.merchantData){
-        this.merchantData = await this.getBusiness();
-      }
-      return this.merchantData
-    }catch(e){
-      return this.merchantData
-    }
-  }
-
-  async getBusiness(): Promise<GetBusinessResponse | ErrorResponse> {
-    try {
-      const getBusiness = await fetch(
-        `${this.baseUrlTonder}/api/v1/payments/business/${this.apiKeyTonder}`,
-        {
-          headers: {
-            Authorization: `Token ${this.apiKeyTonder}`,
-          },
-          signal: this.signal,
-        }
+      return await getOpenpayDeviceSessionID(
+        merchant_id,
+        public_key,
+        is_sandbox,
       );
-
-      if (getBusiness.ok) return (await getBusiness.json()) as Business;
-
-      throw await buildErrorResponse(getBusiness);
     } catch (e) {
       throw buildErrorResponseFromCatch(e);
     }
   }
 
-  async verify3dsTransaction () {
-    const result3ds = await this.process3ds.verifyTransactionStatus()
-    const resultCheckout = await this.resumeCheckout(result3ds)
-    this.process3ds.setPayload(resultCheckout)
-    return this.handle3dsRedirect(resultCheckout)
+  // TODO: DEPRECATED
+  async getSkyflowTokens({
+    vault_id,
+    vault_url,
+    data,
+  }: TokensRequest): Promise<any | ErrorResponse> {
+    return await getSkyflowTokens({
+      vault_id: vault_id,
+      vault_url: vault_url,
+      data,
+      baseUrl: this.baseUrl,
+      apiKey: this.apiKeyTonder,
+    });
   }
 
-  async resumeCheckout(response: any) {
-    // Stop the routing process if the transaction is either hard declined or successful
-    if (response?.decline?.error_type === "Hard") {
-      return response
-    }
-
-    if (["Success", "Authorized"].includes(response?.transaction_status)) {
-      return response;
-    }
-
-    if (response) {
-      const routerItems = {
-        checkout_id: response?.checkout?.id,
-      };
-      try {
-        const routerResponse = await this.handleCheckoutRouter(
-            routerItems
-        );
-        return routerResponse
-      }catch (error){
-        // throw error
-      }
-      return response
-    }
+  _setCartTotal(total: string) {
+    this.cartTotal = total;
   }
 
-  async handle3dsRedirect(response: ErrorResponse | StartCheckoutResponse | false | undefined) {
-    const iframe = response && 'next_action' in response ? response?.next_action?.iframe_resources?.iframe:null
-    if (iframe) {
-      this.process3ds.loadIframe()!.then(() => {
-        //TODO: Check if this will be necessary on the frontend side
-        // after some the tests in production, since the 3DS process
-        // doesn't works properly on the sandbox environment
-        // setTimeout(() => {
-        //   process3ds.verifyTransactionStatus();
-        // }, 10000);
-        this.process3ds.verifyTransactionStatus();
-      }).catch((error: any) => {
-        console.log('Error loading iframe:', error)
-      })
-    } else {
-      const redirectUrl = this.process3ds.getRedirectUrl()
-      if (redirectUrl) {
-        this.process3ds.redirectToChallenge()
+  async _checkout({
+    card,
+    payment_method,
+    isSandbox,
+    // TODO: DEPRECATED
+    returnUrl: returnUrlData
+  }: {
+    card?: ICardFields | string;
+    payment_method?: string;
+    isSandbox?: boolean;
+    returnUrl?: string;
+  }) {
+    await this._fetchMerchantData();
+    const customer = await this._getCustomer(this.abortController.signal);
+    const { vault_id, vault_url } = this.merchantData!;
+    let skyflowTokens;
+    if (!payment_method || payment_method !== "" || payment_method === null) {
+      if (typeof card === "string") {
+        skyflowTokens = {
+          skyflow_id: card,
+        };
       } else {
-        return response;
+        skyflowTokens = await getSkyflowTokens({
+          vault_id: vault_id,
+          vault_url: vault_url,
+          data: { ...card, card_number: card!.card_number.replace(/\s+/g, "") },
+          baseUrl: this.baseUrl,
+          apiKey: this.apiKeyTonder,
+        });
       }
     }
+
+    return await this._handleCheckout({
+      card: skyflowTokens,
+      payment_method,
+      customer,
+      isSandbox,
+      returnUrl: returnUrlData
+    });
   }
-  
-  async customerRegister(email: string): Promise<CustomerRegisterResponse | ErrorResponse> {
+
+  // TODO: DEPRECATED
+  async customerRegister(
+    email: string,
+  ): Promise<CustomerRegisterResponse | ErrorResponse> {
     try {
-      const url = `${this.baseUrlTonder}/api/v1/customer/`;
+      const url = `${this.baseUrl}/api/v1/customer/`;
       const data = { email: email };
       const response = await fetch(url, {
         method: "POST",
@@ -171,20 +270,24 @@ export class LiteCheckout implements LiteCheckoutConstructor {
           "Content-Type": "application/json",
           Authorization: `Token ${this.apiKeyTonder}`,
         },
-        signal: this.signal,
+        signal: this.abortController.signal,
         body: JSON.stringify(data),
       });
 
-      if (response.ok) return await response.json() as CustomerRegisterResponse;
+      if (response.ok)
+        return (await response.json()) as CustomerRegisterResponse;
       throw await buildErrorResponse(response);
     } catch (e) {
       throw buildErrorResponseFromCatch(e);
     }
   }
 
-  async createOrder(orderItems: CreateOrderRequest): Promise<CreateOrderResponse | ErrorResponse> {
+  // TODO: DEPRECATED
+  async createOrder(
+    orderItems: CreateOrderRequest,
+  ): Promise<CreateOrderResponse | ErrorResponse> {
     try {
-      const url = `${this.baseUrlTonder}/api/v1/orders/`;
+      const url = `${this.baseUrl}/api/v1/orders/`;
       const data = orderItems;
       const response = await fetch(url, {
         method: "POST",
@@ -194,16 +297,19 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         },
         body: JSON.stringify(data),
       });
-      if (response.ok) return await response.json() as CreateOrderResponse;
+      if (response.ok) return (await response.json()) as CreateOrderResponse;
       throw await buildErrorResponse(response);
     } catch (e) {
       throw buildErrorResponseFromCatch(e);
     }
   }
 
-  async createPayment(paymentItems: CreatePaymentRequest): Promise<CreatePaymentResponse | ErrorResponse> {
+  // TODO: DEPRECATED
+  async createPayment(
+    paymentItems: CreatePaymentRequest,
+  ): Promise<CreatePaymentResponse | ErrorResponse> {
     try {
-      const url = `${this.baseUrlTonder}/api/v1/business/${paymentItems.business_pk}/payments/`;
+      const url = `${this.baseUrl}/api/v1/business/${paymentItems.business_pk}/payments/`;
       const data = paymentItems;
       const response = await fetch(url, {
         method: "POST",
@@ -213,60 +319,60 @@ export class LiteCheckout implements LiteCheckoutConstructor {
         },
         body: JSON.stringify(data),
       });
-      if (response.ok) return await response.json() as CreatePaymentResponse;
-      throw await buildErrorResponse(response);
-    } catch (e) {
-      throw buildErrorResponseFromCatch(e);
-    }
-  }
-  async handleCheckoutRouter(routerData: StartCheckoutRequest | StartCheckoutIdRequest){
-    try {
-      const url = `${this.baseUrlTonder}/api/v1/checkout-router/`;
-      const data = routerData;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Token ${this.apiKeyTonder}`,
-        },
-        body: JSON.stringify({...data, ...(typeof MP_DEVICE_SESSION_ID !== "undefined" ? {mp_device_session_id: MP_DEVICE_SESSION_ID}:{})}),
-      });
-      if (response.ok) return await response.json() as StartCheckoutResponse;
+      if (response.ok) return (await response.json()) as CreatePaymentResponse;
       throw await buildErrorResponse(response);
     } catch (e) {
       throw buildErrorResponseFromCatch(e);
     }
   }
 
-  async startCheckoutRouter(routerData: StartCheckoutRequest | StartCheckoutIdRequest): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
-    const checkoutResult = await this.handleCheckoutRouter(routerData);
-    const payload = await this.init3DSRedirect(checkoutResult)
-    if(payload)
-      return checkoutResult;
+  // TODO: DEPRECATED
+  async startCheckoutRouter(
+    routerData: StartCheckoutRequest | StartCheckoutIdRequest,
+  ): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
+    const checkoutResult = await startCheckoutRouter(
+      this.baseUrl,
+      this.apiKeyTonder,
+      routerData,
+    );
+    const payload = await this.init3DSRedirect(checkoutResult);
+    if (payload) return checkoutResult;
   }
 
-  async startCheckoutRouterFull(routerFullData: StartCheckoutFullRequest): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
-    
-    try {
+  // TODO: DEPRECATED
+  async init3DSRedirect(checkoutResult: IStartCheckoutResponse) {
+    this.process3ds.setPayload(checkoutResult);
+    return await this._handle3dsRedirect(checkoutResult);
+  }
 
-      const { 
-        order, 
-        total, 
-        customer, 
-        skyflowTokens, 
-        return_url, 
-        isSandbox, 
-        metadata, 
+  // TODO: DEPRECATED
+  async startCheckoutRouterFull(
+    routerFullData: StartCheckoutFullRequest,
+  ): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
+    try {
+      const {
+        order,
+        total,
+        customer,
+        skyflowTokens,
+        return_url,
+        isSandbox,
+        metadata,
         currency,
-        payment_method
+        payment_method,
       } = routerFullData;
 
-      const merchantResult = await this.getBusiness();
+      const merchantResult = await this._fetchMerchantData();
 
-      const customerResult : CustomerRegisterResponse | ErrorResponse = await this.customerRegister(customer.email);
+      const customerResult: CustomerRegisterResponse | ErrorResponse =
+        await this.customerRegister(customer.email);
 
-      if(customerResult && "auth_token" in customerResult && merchantResult && "reference" in merchantResult) {
-
+      if (
+        customerResult &&
+        "auth_token" in customerResult &&
+        merchantResult &&
+        "reference" in merchantResult
+      ) {
         const orderData: CreateOrderRequest = {
           business: this.apiKeyTonder,
           client: customerResult.auth_token,
@@ -284,29 +390,30 @@ export class LiteCheckout implements LiteCheckoutConstructor {
 
         const dateString = now.toISOString();
 
-        if("id" in orderResult && "id" in customerResult && "business" in merchantResult) {
-
+        if (
+          "id" in orderResult &&
+          "id" in customerResult &&
+          "business" in merchantResult
+        ) {
           const paymentItems: CreatePaymentRequest = {
             business_pk: merchantResult.business.pk,
             amount: total,
             date: dateString,
             order_id: orderResult.id,
-            client_id: customerResult.id
+            client_id: customerResult.id,
           };
 
-          const paymentResult = await this.createPayment(
-            paymentItems
-          );
+          const paymentResult = await this.createPayment(paymentItems);
 
           let deviceSessionIdTonder: any;
 
-          const { openpay_keys, business } = merchantResult
+          const { openpay_keys, business } = merchantResult;
 
           if (openpay_keys.merchant_id && openpay_keys.public_key) {
-            deviceSessionIdTonder = await this.getOpenpayDeviceSessionID(
+            deviceSessionIdTonder = await getOpenpayDeviceSessionID(
               openpay_keys.merchant_id,
               openpay_keys.public_key,
-              isSandbox
+              isSandbox,
             );
           }
 
@@ -323,189 +430,99 @@ export class LiteCheckout implements LiteCheckoutConstructor {
             amount: total,
             title_ship: "shipping",
             description: "transaction",
-            device_session_id: deviceSessionIdTonder ? deviceSessionIdTonder : null,
+            device_session_id: deviceSessionIdTonder
+              ? deviceSessionIdTonder
+              : null,
             token_id: "",
-            order_id: ("id" in orderResult) && orderResult.id,
+            order_id: "id" in orderResult && orderResult.id,
             business_id: business.pk,
-            payment_id: ("pk" in paymentResult) && paymentResult.pk,
-            source: 'sdk',
+            payment_id: "pk" in paymentResult && paymentResult.pk,
+            source: "sdk",
             metadata: metadata,
             browser_info: getBrowserInfo(),
             currency: currency,
-            ...( !!payment_method
-              ? {payment_method}
-              : {card: skyflowTokens}
-            ),
-            ...(typeof MP_DEVICE_SESSION_ID !== "undefined" ? {mp_device_session_id: MP_DEVICE_SESSION_ID}:{})
+            ...(!!payment_method
+              ? { payment_method }
+              : { card: skyflowTokens }),
+            ...(typeof MP_DEVICE_SESSION_ID !== "undefined"
+              ? { mp_device_session_id: MP_DEVICE_SESSION_ID }
+              : {}),
           };
 
-          const checkoutResult = await this.handleCheckoutRouter(routerItems);
-          const payload = await this.init3DSRedirect(checkoutResult)
-          if(payload)
-            return checkoutResult;
+          const checkoutResult = await startCheckoutRouter(
+            this.baseUrl,
+            this.apiKeyTonder,
+            routerItems,
+          );
+          const payload = await this.init3DSRedirect(checkoutResult);
+          if (payload) return checkoutResult;
         } else {
-
           throw new ErrorResponse({
             code: "500",
             body: orderResult as any,
             name: "Keys error",
-            message: "Order response errors"
-          } as IErrorResponse)
-        
+            message: "Order response errors",
+          } as IErrorResponse);
         }
-      
       } else {
-
         throw new ErrorResponse({
           code: "500",
           body: merchantResult as any,
           name: "Keys error",
-          message: "Merchant or customer reposne errors"
-        } as IErrorResponse)
-      
+          message: "Merchant or customer reposne errors",
+        } as IErrorResponse);
       }
     } catch (e) {
-      
       throw buildErrorResponseFromCatch(e);
-    
     }
   }
 
-  async init3DSRedirect(checkoutResult: ErrorResponse | StartCheckoutResponse){
-    this.process3ds.setPayload(checkoutResult)
-    return await this.handle3dsRedirect(checkoutResult)
-  }
-
-  async getSkyflowTokens({
-    vault_id,
-    vault_url,
-    data,
-  }: TokensRequest): Promise<any | ErrorResponse> {
-    const skyflow = Skyflow.init({
-      vaultID: vault_id,
-      vaultURL: vault_url,
-      getBearerToken: async () => await this.getVaultToken(),
-      options: {
-        logLevel: Skyflow.LogLevel.ERROR,
-        env: Skyflow.Env.DEV,
-      },
-    });
-
-    const collectContainer: CollectContainer = skyflow.container(
-      Skyflow.ContainerType.COLLECT
-    ) as CollectContainer;
-
-    const fieldPromises = await this.getFieldsPromise(data, collectContainer);
-
-    const result = await Promise.all(fieldPromises);
-
-    const mountFail = result.some((item: boolean) => !item);
-
-    if (mountFail) {
-      throw buildErrorResponseFromCatch(Error("Ocurrió un error al montar los campos de la tarjeta"));
-    } else {
-      try {
-        const collectResponseSkyflowTonder = await collectContainer.collect() as any;
-        if (collectResponseSkyflowTonder) return collectResponseSkyflowTonder["records"][0]["fields"];
-        throw buildErrorResponseFromCatch(Error("Por favor, verifica todos los campos de tu tarjeta"))
-      } catch (error) {
-        throw buildErrorResponseFromCatch(error);
-      }
-    }
-  }
-
-  async getVaultToken(): Promise<string> {
+  // TODO: DEPRECATED
+  async registerCustomerCard(
+    customerToken: string,
+    data: RegisterCustomerCardRequest,
+  ): Promise<RegisterCustomerCardResponse | ErrorResponse> {
     try {
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/vault-token/`, {
-        method: "GET",
-        headers: {
-          Authorization: `Token ${this.apiKeyTonder}`,
+      await this._fetchMerchantData();
+
+      const response = await fetch(
+        `${this.baseUrl}/api/v1/business/${getBusinessId(this.merchantData)}/cards/`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Token ${customerToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ...data }),
         },
-        signal: this.signal,
-      });
-      if (response.ok) return (await response.json() as GetVaultTokenResponse)?.token;
-      throw new Error(`HTTPCODE: ${response.status}`)
-    } catch (e) {
-      throw new Error(`Failed to retrieve bearer token; ${typeof e == "string" ? e : (e as Error).message}`)
-    }
-  }
+      );
 
-  async getFieldsPromise(data: any, collectContainer: CollectContainer): Promise<Promise<boolean>[]> {
-    const fields = await this.getFields(data, collectContainer);
-    if (!fields) return [];
-
-    return fields.map((field: { element: CollectElement, key: string }) => {
-      return new Promise((resolve) => {
-        const div = document.createElement("div");
-        div.hidden = true;
-        div.id = `id-${field.key}`;
-        document.querySelector(`body`)?.appendChild(div);
-        setTimeout(() => {
-          field.element.mount(`#id-${field.key}`);
-          setInterval(() => {
-            if (field.element.isMounted()) {
-              const value = data[field.key];
-              field.element.update({ value: value });
-              return resolve(field.element.isMounted());
-            }
-          }, 120);
-        }, 120);
-      });
-    })
-  }
-
-  async registerCustomerCard(customerToken: string, data: RegisterCustomerCardRequest): Promise<RegisterCustomerCardResponse | ErrorResponse> {
-    try {
-      await this.#fetchMerchantData()
-
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Token ${customerToken}`,
-          'Content-Type': 'application/json'
-        },
-        signal: this.signal,
-        body: JSON.stringify({...data})
-      });
-
-      if (response.ok) return await response.json() as RegisterCustomerCardResponse;
+      if (response.ok)
+        return (await response.json()) as RegisterCustomerCardResponse;
       throw await buildErrorResponse(response);
     } catch (error) {
       throw buildErrorResponseFromCatch(error);
     }
   }
 
-  async getCustomerCards(customerToken: string): Promise<GetCustomerCardsResponse | ErrorResponse> {
+  // TODO: DEPRECATED
+  async deleteCustomerCard(
+    customerToken: string,
+    skyflowId: string = "",
+  ): Promise<Boolean | ErrorResponse> {
     try {
-      await this.#fetchMerchantData()
-
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Token ${customerToken}`,
-          'Content-Type': 'application/json'
+      await this._fetchMerchantData();
+      const response = await fetch(
+        `${this.baseUrl}/api/v1/business/${getBusinessId(this.merchantData)}/cards/${skyflowId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Token ${customerToken}`,
+            "Content-Type": "application/json",
+          },
+          signal: this.abortController.signal,
         },
-        signal: this.signal,
-      });
-
-      if (response.ok) return await response.json() as GetCustomerCardsResponse;
-      throw await buildErrorResponse(response);
-    } catch (error) {
-      throw buildErrorResponseFromCatch(error);
-    }
-  }
-
-  async deleteCustomerCard(customerToken: string, skyflowId: string = ""): Promise<Boolean | ErrorResponse> {
-    try {
-      await this.#fetchMerchantData()
-      const response = await fetch(`${this.baseUrlTonder}/api/v1/business/${getBusinessId(this.merchantData)}/cards/${skyflowId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Token ${customerToken}`,
-          'Content-Type': 'application/json'
-        },
-        signal: this.signal,
-      });
+      );
 
       if (response.ok) return true;
       throw await buildErrorResponse(response);
@@ -514,38 +531,36 @@ export class LiteCheckout implements LiteCheckoutConstructor {
     }
   }
 
-  private async getFields(data: any, collectContainer: CollectContainer): Promise<{ element: CollectElement, key: string }[]> {
-    return await Promise.all(
-      Object.keys(data).map(async (key) => {
-        const cardHolderNameElement = await collectContainer.create({
-          table: "cards",
-          column: key,
-          type: Skyflow.ElementType.INPUT_FIELD,
-        });
-        return { element: cardHolderNameElement, key: key };
-      })
-    )
-  }
-
+  // TODO: DEPRECATED
   async getActiveAPMs(): Promise<APM[]> {
     try {
-      const apms_response = await getCustomerAPMs(this.baseUrlTonder, this.apiKeyTonder);
-      const apms_results = apms_response && apms_response['results'] && apms_response['results'].length > 0 ? apms_response['results'] : []
+      const apms_response = await getCustomerAPMs(
+        this.baseUrl,
+        this.apiKeyTonder,
+      );
+      const apms_results =
+        apms_response &&
+        apms_response["results"] &&
+        apms_response["results"].length > 0
+          ? apms_response["results"]
+          : [];
       this.activeAPMs = apms_results
-        .filter((apmItem: TonderAPM) =>
-          apmItem.category.toLowerCase() !== 'cards')
+        .filter(
+          (apmItem: TonderAPM) => apmItem.category.toLowerCase() !== "cards",
+        )
         .map((apmItem: TonderAPM) => {
           const apm: APM = {
             id: apmItem.pk,
             payment_method: apmItem.payment_method,
             priority: apmItem.priority,
             category: apmItem.category,
-            ...getPaymentMethodDetails(apmItem.payment_method,)
-          }
+            ...getPaymentMethodDetails(apmItem.payment_method),
+          };
           return apm;
-        }).sort((a: APM, b: APM) => a.priority - b.priority);
+        })
+        .sort((a: APM, b: APM) => a.priority - b.priority);
 
-      return this.activeAPMs
+      return this.activeAPMs;
     } catch (e) {
       console.error("Error getting APMS", e);
       return [];
