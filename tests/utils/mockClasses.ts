@@ -4,9 +4,8 @@ import {
     CreatePaymentRequest,
     RegisterCustomerCardRequest,
     StartCheckoutRequest,
-    TokensRequest,
     StartCheckoutFullRequest,
-    StartCheckoutRequestWithCard
+    StartCheckoutRequestWithCard, TokensSkyflowRequest
 } from "../../src/types/requests";
 import {
     CreateOrderResponse,
@@ -556,13 +555,17 @@ export class StartCheckoutFullRequestClass implements StartCheckoutFullRequest {
     }
 }
 
-export class TokensRequestClass implements TokensRequest {
+export class TokensRequestClass implements TokensSkyflowRequest {
+    baseUrl!: string;
+    apiKey!: string;
     vault_id!: string;
     vault_url!: string;
     data: { [key: string]: any } = {};
 
-    get mockObject(): TokensRequest {
+    get mockObject(): TokensSkyflowRequest {
         return {
+            baseUrl: "",
+            apiKey: "",
             vault_id: "string",
             vault_url: "string",
             data: {
