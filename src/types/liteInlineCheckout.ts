@@ -171,6 +171,7 @@ export interface ILiteCheckout {
    * Use the {@link saveCustomerCard} method
    */
   registerCustomerCard(
+    secureToken: string,
     customerToken: string,
     data: RegisterCustomerCardRequest,
   ): Promise<RegisterCustomerCardResponse | ErrorResponse>;

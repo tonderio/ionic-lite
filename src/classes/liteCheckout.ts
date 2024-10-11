@@ -479,6 +479,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
 
   // TODO: DEPRECATED
   async registerCustomerCard(
+    secureToken: string,
     customerToken: string,
     data: RegisterCustomerCardRequest,
   ): Promise<RegisterCustomerCardResponse | ErrorResponse> {
