@@ -272,11 +272,13 @@ export class BaseInlineCheckout {
 
   async _saveCustomerCard(
     authToken: string,
+    secureToken: string,
     businessId: string | number,
     skyflowTokens: ISaveCardSkyflowRequest,
   ): Promise<ISaveCardResponse> {
     return await saveCustomerCard(
       this.baseUrl,
+      secureToken,
       authToken,
       businessId,
       skyflowTokens,

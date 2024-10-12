@@ -86,7 +86,7 @@ export interface ILiteCheckout {
    *
    * @public
    */
-  saveCustomerCard(card: ISaveCardRequest): Promise<ISaveCardResponse>;
+  saveCustomerCard(secureToken: string, card: ISaveCardRequest): Promise<ISaveCardResponse>;
 
   /**
    * Removes a card from a customer's account.

@@ -80,6 +80,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   }
 
   public async saveCustomerCard(
+    secureToken: string,
     card: ISaveCardRequest,
   ): Promise<ISaveCardResponse> {
     try {
@@ -96,6 +97,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       });
 
       return await this._saveCustomerCard(
+        secureToken,
         auth_token,
         business?.pk,
         skyflowTokens,
@@ -491,7 +493,8 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         {
           method: "POST",
           headers: {
-            Authorization: `Token ${customerToken}`,
+            Authorization: `Bearer ${secureToken}`,
+            "User-token": customerToken,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ ...data }),
