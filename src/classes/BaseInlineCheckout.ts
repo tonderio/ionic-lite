@@ -34,7 +34,7 @@ export class BaseInlineCheckout {
   callBack?: ((response: IStartCheckoutResponse | Record<string, any>) => void) | undefined;
   merchantData?: Business;
   abortController: AbortController;
-  secureToken: string | null = null;
+  secureToken: string = "";
   customer?: ICustomer | { email: string };
 
   cartItems?: IItem[];
@@ -279,7 +279,7 @@ export class BaseInlineCheckout {
   ): Promise<ISaveCardResponse> {
     return await saveCustomerCard(
       this.baseUrl,
-      secureToken,
+      this.secureToken,
       authToken,
       businessId,
       skyflowTokens,
