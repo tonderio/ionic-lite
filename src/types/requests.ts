@@ -1,5 +1,5 @@
-import { OrderItem } from "./commons";
 import { SkyflowRecord } from "./skyflow";
+import {IItem} from "./checkout";
 
 export interface CreateOrderRequest {
     business: string,
@@ -10,7 +10,7 @@ export interface CreateOrderRequest {
     status?: string,
     reference: string | number,
     is_oneclick: boolean,
-    items: OrderItem[]
+    items: IItem[]
 }
 
 export type CreatePaymentRequest = {
@@ -71,6 +71,15 @@ export type RegisterCustomerCardRequest = {
     skyflow_id: string;
 }
 
+export type TokensSkyflowRequest = {
+    baseUrl: string;
+    apiKey: string;
+    vault_id: string,
+    vault_url: string,
+    data: {
+        [key: string]: any;
+    }
+}
 export type TokensRequest = {
     vault_id: string,
     vault_url: string,
@@ -81,7 +90,7 @@ export type TokensRequest = {
 
 export type StartCheckoutFullRequest = {
     order: {
-        items: OrderItem[];
+        items: IItem[];
     };
     total: number;
     customer: {

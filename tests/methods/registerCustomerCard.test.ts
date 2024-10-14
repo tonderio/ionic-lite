@@ -1,10 +1,10 @@
 import "../utils/defaultMock";
 import { LiteCheckout } from "../../src";
-import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
 import { constructorFields } from "../utils/defaultMock";
 import { RegisterCustomerCardRequestClass, RegisterCustomerCardResponseClass } from "../utils/mockClasses";
 import { ErrorResponse } from "../../src/classes/errorResponse";
 import { IErrorResponse } from "../../src/types/responses";
+import {IInlineLiteCheckoutOptions} from "../../src/types/commons";
 
 declare global {
     interface Window {
@@ -14,7 +14,7 @@ declare global {
 }
 
 describe("registerCustomerCard", () => {
-    let checkoutConstructor: LiteCheckoutConstructor,
+    let checkoutConstructor: IInlineLiteCheckoutOptions,
         liteCheckout: LiteCheckout,
         fetchSpy: jest.SpyInstance,
         liteCheckoutSpy: jest.SpyInstance;

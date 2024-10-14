@@ -1,10 +1,9 @@
 import "../utils/defaultMock";
 import { LiteCheckout } from "../../src";
 import { ErrorResponse } from "../../src/classes/errorResponse";
-import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
-import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
-import { OrderResponseClass, OrderClass, OrderClassEmptyValues, OrderEmptyValuesResponse } from "../utils/mockClasses";
+import { OrderResponseClass, OrderClass, OrderEmptyValuesResponse } from "../utils/mockClasses";
+import {IInlineLiteCheckoutOptions} from "../../src/types/commons";
 
 declare global {
     interface Window {
@@ -14,7 +13,7 @@ declare global {
 }
 
 describe("createOrder", () => {
-    let checkoutConstructor: LiteCheckoutConstructor,
+    let checkoutConstructor: IInlineLiteCheckoutOptions,
         liteCheckout: LiteCheckout,
         fetchSpy: jest.SpyInstance,
         liteCheckoutSpy: jest.SpyInstance;

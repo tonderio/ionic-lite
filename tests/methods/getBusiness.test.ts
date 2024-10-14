@@ -1,10 +1,9 @@
 import "../utils/defaultMock";
 import { LiteCheckout } from "../../src";
 import { ErrorResponse } from "../../src/classes/errorResponse";
-import { LiteCheckoutConstructor } from "../../src/classes/liteCheckout";
-import { IErrorResponse } from "../../src/types/responses";
 import { constructorFields } from "../utils/defaultMock";
 import { BusinessClass } from "../utils/mockClasses";
+import {IInlineLiteCheckoutOptions} from "../../src/types/commons";
 
 declare global {
     interface Window {
@@ -14,7 +13,7 @@ declare global {
 }
 
 describe("getBusiness", () => {
-    let checkoutConstructor: LiteCheckoutConstructor,
+    let checkoutConstructor: IInlineLiteCheckoutOptions,
         liteCheckout: LiteCheckout,
         fetchSpy: jest.SpyInstance,
         liteCheckoutSpy: jest.SpyInstance;
@@ -84,7 +83,7 @@ describe("getBusiness", () => {
         let error: ErrorResponse;
 
         try {
-            const response = (await liteCheckout.getBusiness()) as IErrorResponse;
+            const response = (await liteCheckout.getBusiness());
         } catch (e: any) {
             error = e;
             expect(error.code).toStrictEqual("400");
@@ -100,7 +99,7 @@ describe("getBusiness", () => {
         let error: ErrorResponse;
 
         try {
-            const response = (await liteCheckout.getBusiness()) as ErrorResponse;
+            const response = (await liteCheckout.getBusiness());
         } catch (e: any) {
             error = e;
             expect(error.message).toStrictEqual("error");

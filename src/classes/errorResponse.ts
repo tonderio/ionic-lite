@@ -1,4 +1,4 @@
-import { IErrorResponse } from "../types/responses";
+import {IErrorResponse} from "../types/responses";
 
 export class ErrorResponse implements IErrorResponse {
     code?: string | undefined;
