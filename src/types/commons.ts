@@ -87,6 +87,7 @@ export type APM = {
 
 export interface IConfigureCheckout {
   customer: ICustomer | { email: string };
+  secureToken: string
 }
 
 export interface IInlineCheckoutBaseOptions {

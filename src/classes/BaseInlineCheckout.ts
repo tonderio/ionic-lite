@@ -34,7 +34,7 @@ export class BaseInlineCheckout {
   callBack?: ((response: IStartCheckoutResponse | Record<string, any>) => void) | undefined;
   merchantData?: Business;
   abortController: AbortController;
-
+  secureToken: string | null = null;
   customer?: ICustomer | { email: string };
 
   cartItems?: IItem[];
@@ -67,6 +67,7 @@ export class BaseInlineCheckout {
 
   configureCheckout(data: IConfigureCheckout) {
     if ("customer" in data) this.#handleCustomer(data["customer"]);
+    if ("secureToken" in data) this.#setSecureToken(data["secureToken"]);
   }
 
   async verify3dsTransaction(): Promise<ITransaction | IStartCheckoutResponse | void> {
@@ -305,6 +306,10 @@ export class BaseInlineCheckout {
     if (!customer) return;
 
     this.customer = customer;
+  }
+
+  #setSecureToken(token: string) {
+    this.secureToken = token;
   }
 
   #setCartItems(items: IItem[]) {
