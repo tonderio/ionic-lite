@@ -18,7 +18,7 @@ import {
   saveCustomerCard,
 } from "../data/cardApi";
 import { fetchCustomerPaymentMethods } from "../data/paymentMethodApi";
-import {Business, IConfigureCheckout, IInlineCheckoutBaseOptions} from "../types/commons";
+import {Business, IConfigureCheckout, IInlineCheckoutBaseOptions, CustomizationOptions} from "../types/commons";
 import {ICustomer} from "../types/customer";
 import {ICardFields, IItem, IProcessPaymentRequest, IStartCheckoutResponse} from "../types/checkout";
 import {ICustomerCardsResponse, ISaveCardResponse, ISaveCardSkyflowRequest} from "../types/card";
@@ -31,11 +31,20 @@ export class BaseInlineCheckout {
   mode?: "production" | "sandbox" | "stage" | "development" | undefined;
   apiKeyTonder: string;
   returnUrl?: string;
+  tdsIframeId?: string;
   callBack?: ((response: IStartCheckoutResponse | Record<string, any>) => void) | undefined;
   merchantData?: Business;
   abortController: AbortController;
   secureToken: string = "";
   customer?: ICustomer | { email: string };
+  customization: CustomizationOptions = {
+    saveCards: {
+      showSaveCardOption: true,
+      showSaved: true,
+      autoSave: false
+    },
+    redirectOnComplete: true
+  }
 
   cartItems?: IItem[];
   metadata = {};
@@ -46,9 +55,11 @@ export class BaseInlineCheckout {
 
   constructor({
     mode = "stage",
+    customization,
     apiKey,
     apiKeyTonder,
     returnUrl,
+    tdsIframeId,
     callBack = () => {},
     baseUrlTonder
   }: IInlineCheckoutBaseOptions) {
@@ -62,7 +73,19 @@ export class BaseInlineCheckout {
     this.process3ds = new ThreeDSHandler({
       apiKey: apiKey,
       baseUrl: this.baseUrl,
+      customization: customization,
+      tdsIframeId: tdsIframeId,
+      callBack: callBack
     });
+    this.tdsIframeId = tdsIframeId;
+    this.customization = {
+      ...this.customization,
+      ...(customization || {}),
+      saveCards: {
+        ...this.customization.saveCards,
+        ...(customization?.saveCards || {})
+      }
+    }
   }
 
   configureCheckout(data: IConfigureCheckout) {
@@ -88,9 +111,9 @@ export class BaseInlineCheckout {
         this.#handleCard(data);
         const response = await this._checkout(data);
         this.process3ds.setPayload(response);
-        if (this.callBack) this.callBack!(response);
         const payload = await this._handle3dsRedirect(response);
         if (payload) {
+          if (this.callBack) this.callBack!(response);
           resolve(response);
         }
       } catch (error) {

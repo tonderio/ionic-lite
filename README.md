@@ -43,7 +43,7 @@ import { LiteCheckout } from "@tonder.io/ionic-lite-sdk"
 const liteCheckout = new LiteCheckout({ 
   signal, 
   baseUrlTonder, 
-  publicApiKeyTonder
+  apiKeyTonder
 })
 
 // The configureCheckout function allows you to set initial information,
@@ -93,7 +93,7 @@ const paymentResponse = await liteCheckout.payment(paymentData);
 | Property  |   Type   |                                         Description                                          |
 |:---------:|:--------:|:--------------------------------------------------------------------------------------------:|
 |   mode    |  string  | Environment mode. Options: 'stage', 'production', 'sandbox', 'development'. Default: 'stage' |
-|  publicApiKey   |  string  |                            Your API key from the Tonder Dashboard                            |
+|  apiKey   |  string  |                            Your API key from the Tonder Dashboard                            |
 | returnrl |  string  |                    URL where the checkout form is mounted (used for 3DS)                     |
 | callBack  | function |         Callback function to be invoked after the payment process ends successfully.         |
 

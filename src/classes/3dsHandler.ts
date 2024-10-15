@@ -1,24 +1,52 @@
+import { CustomizationOptions } from "../types/commons"
+
 type ThreeDSHandlerContructor = {
   payload?: any,
   apiKey?: string,
   baseUrl?: string,
+  customization?: CustomizationOptions,
+  tdsIframeId?: string, 
+  callBack?: (params: any) => any
 }
 
 export class ThreeDSHandler {
 
+  callBack?: (params: any) => any
   baseUrl?: string
   apiKey?: string
   payload?: any
   localStorageKey: string = "verify_transaction_status_url"
+  customization: CustomizationOptions = {
+    saveCards: {
+      showSaveCardOption: true,
+      showSaved: true,
+      autoSave: false
+    },
+    redirectOnComplete: true
+  }
+  tdsIframeId?: string
 
   constructor({
     payload = null,
     apiKey,
     baseUrl,
+    customization,
+    tdsIframeId,
+    callBack
   }: ThreeDSHandlerContructor) {
     this.baseUrl = baseUrl,
     this.apiKey = apiKey,
     this.payload = payload
+    this.tdsIframeId = tdsIframeId
+    this.customization = {
+      ...this.customization,
+      ...(customization || {}),
+      saveCards: {
+        ...this.customization.saveCards,
+        ...(customization?.saveCards || {}),
+      },
+    }
+    this.callBack = callBack
   }
 
   setStorageItem (data: any) {
@@ -128,10 +156,82 @@ export class ThreeDSHandler {
     const url = this.getRedirectUrl()
     if (url) {
       this.saveVerifyTransactionUrl()
-      window.location = url;
+      if(this.customization) {
+        if(this.customization?.redirectOnComplete) {
+          window.location = url;
+        } else {
+          const iframe = document.querySelector(`#${this.tdsIframeId}`)
+          if(iframe) {
+  
+            iframe.setAttribute("src", url);
+            iframe.setAttribute("style", "display: block");
+            
+            const self = this;
+  
+            const listenerHandler = async (event: any) => {
+  
+              const checkStatus = (result: any) => result?.transaction_status !== "Pending";
+  
+              const executeAction = () => {
+                if(iframe) {
+                  iframe.setAttribute("style", "display: none");
+                }
+                if(self.callBack) self.callBack(self.payload);
+                iframe.removeEventListener("load", listenerHandler);
+              }
+  
+              const chainPromises = async (promise: Promise<any>) => {
+                const result = await new Promise((resolve, reject) => resolve(promise))
+                if(result) {
+                  if(checkStatus(result)) {
+                    return executeAction()
+                  } else {
+                    const timer = setTimeout(async () => {
+                      clearTimeout(timer);
+                      await chainPromises(self.requestTransactionStatus());
+                    }, 15000)
+                  }
+                }
+              }
+  
+              await chainPromises(self.requestTransactionStatus())
+            }
+  
+            iframe.addEventListener("load", listenerHandler)
+  
+          } else {
+            console.log('No iframe found');
+          }
+        }
+      } else {
+        window.location = url;
+      }
     } else {
-      console.log('No redirection found');
+      if (this.callBack) this.callBack!(this.payload);
     }
+  }
+
+  async requestTransactionStatus() {
+
+    const verifyUrl = this.getUrlWithExpiration();
+    const url = `${this.baseUrl}${verifyUrl}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Token ${this.apiKey}`,
+      },
+      // body: JSON.stringify(data),
+    });
+
+    if (response.status !== 200) {
+      console.error('La verificación de la transacción falló.');
+      return null;
+    } else {
+      const response_json = await response.json();
+      return response_json;
+    }
+
   }
   
   // Returns an object
