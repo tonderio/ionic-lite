@@ -32,6 +32,7 @@ export class BaseInlineCheckout {
   apiKeyTonder: string;
   returnUrl?: string;
   tdsIframeId?: string;
+  tonderPayButtonId?: string;
   callBack?: ((response: IStartCheckoutResponse | Record<string, any>) => void) | undefined;
   merchantData?: Business;
   abortController: AbortController;
@@ -61,7 +62,8 @@ export class BaseInlineCheckout {
     returnUrl,
     tdsIframeId,
     callBack = () => {},
-    baseUrlTonder
+    baseUrlTonder,
+    tonderPayButtonId
   }: IInlineCheckoutBaseOptions) {
     this.apiKeyTonder = apiKeyTonder || apiKey || "";
     this.returnUrl = returnUrl;
@@ -75,6 +77,7 @@ export class BaseInlineCheckout {
       baseUrl: this.baseUrl,
       customization: customization,
       tdsIframeId: tdsIframeId,
+      tonderPayButtonId: tonderPayButtonId,
       callBack: callBack
     });
     this.tdsIframeId = tdsIframeId;
@@ -113,6 +116,12 @@ export class BaseInlineCheckout {
         this.process3ds.setPayload(response);
         const payload = await this._handle3dsRedirect(response);
         if (payload) {
+          try {
+            const selector: any = document.querySelector(`#${this.tonderPayButtonId}`);
+            if(selector) {
+              selector.disabled = false;
+            }
+          } catch {}
           if (this.callBack) this.callBack!(response);
           resolve(response);
         }

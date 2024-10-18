@@ -111,7 +111,8 @@ export interface IInlineCheckoutBaseOptions {
   returnUrl?: string;
   callBack?: (response: IStartCheckoutResponse | Record<string, any>) => void;
   customization?: CustomizationOptions;
-  tdsIframeId?: string
+  tdsIframeId?: string,
+  tonderPayButtonId?: string
 }
 
 export interface IInlineLiteCheckoutOptions

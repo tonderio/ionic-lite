@@ -6,6 +6,7 @@ type ThreeDSHandlerContructor = {
   baseUrl?: string,
   customization?: CustomizationOptions,
   tdsIframeId?: string, 
+  tonderPayButtonId?: string,
   callBack?: (params: any) => any
 }
 
@@ -25,6 +26,7 @@ export class ThreeDSHandler {
     redirectOnComplete: true
   }
   tdsIframeId?: string
+  tonderPayButtonId?: string
 
   constructor({
     payload = null,
@@ -32,12 +34,14 @@ export class ThreeDSHandler {
     baseUrl,
     customization,
     tdsIframeId,
+    tonderPayButtonId,
     callBack
   }: ThreeDSHandlerContructor) {
     this.baseUrl = baseUrl,
     this.apiKey = apiKey,
     this.payload = payload
     this.tdsIframeId = tdsIframeId
+    this.tonderPayButtonId = tonderPayButtonId
     this.customization = {
       ...this.customization,
       ...(customization || {}),
@@ -173,6 +177,12 @@ export class ThreeDSHandler {
               const checkStatus = (result: any) => result?.transaction_status !== "Pending";
   
               const executeAction = () => {
+                try {
+                  const selector: any = document.querySelector(`#${this.tonderPayButtonId}`);
+                  if(selector) {
+                    selector.disabled = false;
+                  }
+                } catch {}
                 if(iframe) {
                   iframe.setAttribute("style", "display: none");
                 }
@@ -189,7 +199,7 @@ export class ThreeDSHandler {
                     const timer = setTimeout(async () => {
                       clearTimeout(timer);
                       await chainPromises(self.requestTransactionStatus());
-                    }, 15000)
+                    }, 7000)
                   }
                 }
               }
