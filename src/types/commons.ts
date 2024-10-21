@@ -110,6 +110,9 @@ export interface IInlineCheckoutBaseOptions {
   apiKey: string;
   returnUrl?: string;
   callBack?: (response: IStartCheckoutResponse | Record<string, any>) => void;
+  customization?: CustomizationOptions;
+  tdsIframeId?: string,
+  tonderPayButtonId?: string
 }
 
 export interface IInlineLiteCheckoutOptions
@@ -128,4 +131,13 @@ export interface IPublicError {
   code: number;
   message: string;
   detail: Record<string, any> | string;
+}
+
+export type CustomizationOptions = {
+    saveCards?: {
+        showSaveCardOption?: boolean;
+        showSaved?: boolean;
+        autoSave?: boolean;
+    },
+    redirectOnComplete?: boolean
 }
