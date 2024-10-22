@@ -32,6 +32,7 @@ export async function fetchCustomerCards(
 
 export async function saveCustomerCard(
   baseUrl: string,
+  secureToken: string,
   customerToken: string,
   businessId: string | number,
   data: ISaveCardSkyflowRequest,
@@ -41,8 +42,9 @@ export async function saveCustomerCard(
     const response = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Token ${customerToken}`,
+        Authorization: `Bearer ${secureToken}`,
         "Content-Type": "application/json",
+        'User-token': customerToken,
       },
       body: JSON.stringify(data),
     });

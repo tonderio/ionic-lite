@@ -94,7 +94,7 @@ const paymentResponse = await liteCheckout.payment(paymentData);
 |:---------:|:--------:|:--------------------------------------------------------------------------------------------:|
 |   mode    |  string  | Environment mode. Options: 'stage', 'production', 'sandbox', 'development'. Default: 'stage' |
 |  apiKey   |  string  |                            Your API key from the Tonder Dashboard                            |
-| returnUrl |  string  |                    URL where the checkout form is mounted (used for 3DS)                     |
+| returnrl |  string  |                    URL where the checkout form is mounted (used for 3DS)                     |
 | callBack  | function |         Callback function to be invoked after the payment process ends successfully.         |
 
 ## Mobile settings
@@ -431,10 +431,29 @@ export class TonderCheckoutComponent implements OnInit, OnDestroy {
 }
 ```
 
+## Request secure token
+
+```typescript
+
+const jsonResponse = await liteCheckout.getSecureToken(
+  secretApiKey //You can take this from you Tonder Dashboard 
+);
+
+```
+
+## Return secure token
+
+```typescript
+{
+    access: string;
+}
+```
+
 ## Deprecated Fields
 
 The following fields have been deprecated and should no longer be used. Consider using the recommended alternatives:
 
+## Register customer card
 ### `apiKeyTonder` Property
 
 - **Deprecated Reason:** The `apiKeyTonder` property in the constructor and `IInlineLiteCheckoutOptions` interface is no longer required.

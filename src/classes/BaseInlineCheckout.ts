@@ -18,7 +18,7 @@ import {
   saveCustomerCard,
 } from "../data/cardApi";
 import { fetchCustomerPaymentMethods } from "../data/paymentMethodApi";
-import {Business, IConfigureCheckout, IInlineCheckoutBaseOptions} from "../types/commons";
+import {Business, IConfigureCheckout, IInlineCheckoutBaseOptions, CustomizationOptions} from "../types/commons";
 import {ICustomer} from "../types/customer";
 import {ICardFields, IItem, IProcessPaymentRequest, IStartCheckoutResponse} from "../types/checkout";
 import {ICustomerCardsResponse, ISaveCardResponse, ISaveCardSkyflowRequest} from "../types/card";
@@ -31,11 +31,21 @@ export class BaseInlineCheckout {
   mode?: "production" | "sandbox" | "stage" | "development" | undefined;
   apiKeyTonder: string;
   returnUrl?: string;
+  tdsIframeId?: string;
+  tonderPayButtonId?: string;
   callBack?: ((response: IStartCheckoutResponse | Record<string, any>) => void) | undefined;
   merchantData?: Business;
   abortController: AbortController;
-
+  secureToken: string = "";
   customer?: ICustomer | { email: string };
+  customization: CustomizationOptions = {
+    saveCards: {
+      showSaveCardOption: true,
+      showSaved: true,
+      autoSave: false
+    },
+    redirectOnComplete: true
+  }
 
   cartItems?: IItem[];
   metadata = {};
@@ -46,11 +56,14 @@ export class BaseInlineCheckout {
 
   constructor({
     mode = "stage",
+    customization,
     apiKey,
     apiKeyTonder,
     returnUrl,
+    tdsIframeId,
     callBack = () => {},
-    baseUrlTonder
+    baseUrlTonder,
+    tonderPayButtonId
   }: IInlineCheckoutBaseOptions) {
     this.apiKeyTonder = apiKeyTonder || apiKey || "";
     this.returnUrl = returnUrl;
@@ -62,11 +75,25 @@ export class BaseInlineCheckout {
     this.process3ds = new ThreeDSHandler({
       apiKey: apiKey,
       baseUrl: this.baseUrl,
+      customization: customization,
+      tdsIframeId: tdsIframeId,
+      tonderPayButtonId: tonderPayButtonId,
+      callBack: callBack
     });
+    this.tdsIframeId = tdsIframeId;
+    this.customization = {
+      ...this.customization,
+      ...(customization || {}),
+      saveCards: {
+        ...this.customization.saveCards,
+        ...(customization?.saveCards || {})
+      }
+    }
   }
 
   configureCheckout(data: IConfigureCheckout) {
     if ("customer" in data) this.#handleCustomer(data["customer"]);
+    if ("secureToken" in data) this.#setSecureToken(data["secureToken"]);
   }
 
   async verify3dsTransaction(): Promise<ITransaction | IStartCheckoutResponse | void> {
@@ -87,9 +114,15 @@ export class BaseInlineCheckout {
         this.#handleCard(data);
         const response = await this._checkout(data);
         this.process3ds.setPayload(response);
-        if (this.callBack) this.callBack!(response);
         const payload = await this._handle3dsRedirect(response);
         if (payload) {
+          try {
+            const selector: any = document.querySelector(`#${this.tonderPayButtonId}`);
+            if(selector) {
+              selector.disabled = false;
+            }
+          } catch {}
+          if (this.callBack) this.callBack!(response);
           resolve(response);
         }
       } catch (error) {
@@ -272,11 +305,13 @@ export class BaseInlineCheckout {
 
   async _saveCustomerCard(
     authToken: string,
+    secureToken: string,
     businessId: string | number,
     skyflowTokens: ISaveCardSkyflowRequest,
   ): Promise<ISaveCardResponse> {
     return await saveCustomerCard(
       this.baseUrl,
+      this.secureToken,
       authToken,
       businessId,
       skyflowTokens,
@@ -303,6 +338,10 @@ export class BaseInlineCheckout {
     if (!customer) return;
 
     this.customer = customer;
+  }
+
+  #setSecureToken(token: string) {
+    this.secureToken = token;
   }
 
   #setCartItems(items: IItem[]) {
