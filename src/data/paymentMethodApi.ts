@@ -29,8 +29,7 @@ export async function fetchCustomerPaymentMethods(
     );
 
     if (response.ok) return await response.json();
-    const res_json = await response.json();
-    throw await buildErrorResponse(response, res_json);
+    throw await buildErrorResponse(response);
   } catch (error) {
     throw buildErrorResponseFromCatch(error);
   }
