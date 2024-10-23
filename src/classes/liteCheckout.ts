@@ -24,7 +24,7 @@ import {
   CreateOrderResponse,
   CreatePaymentResponse,
   CustomerRegisterResponse,
-  GetBusinessResponse, IErrorResponse, RegisterCustomerCardResponse, StartCheckoutResponse, GetSecureTokenResponse
+  GetBusinessResponse, IErrorResponse, RegisterCustomerCardResponse, StartCheckoutResponse
 } from "../types/responses";
 import {
   CreateOrderRequest,
@@ -80,7 +80,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   }
 
   public async saveCustomerCard(
-    secureToken: string,
     card: ISaveCardRequest,
   ): Promise<ISaveCardResponse> {
     try {
@@ -97,7 +96,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       });
 
       return await this._saveCustomerCard(
-        secureToken,
         auth_token,
         business?.pk,
         skyflowTokens,
@@ -568,24 +566,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     } catch (e) {
       console.error("Error getting APMS", e);
       return [];
-    }
-  }
-
-  async getSecureToken(token: string): Promise<GetSecureTokenResponse | ErrorResponse> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/secure-token/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Token ${token}`,
-          'Content-Type': 'application/json'
-        },
-        signal: this.abortController.signal
-      });
-
-      if (response.ok) return await response.json() as GetSecureTokenResponse;
-      throw await buildErrorResponse(response);
-    } catch (error) {
-      throw buildErrorResponseFromCatch(error);
     }
   }
 }

@@ -7,5 +7,6 @@ export const MESSAGES = Object.freeze({
     errorCheckout: "No se ha podido procesar el pago",
     cardSaved: "Tarjeta registrada con éxito.",
     getPaymentMethodsError: "Ha ocurrido un error obteniendo las métodos de pago del customer. Inténtalo nuevamente.",
-    getBusinessError: "Ha ocurrido un error obteniendo los datos del comercio. Inténtalo nuevamente."
+    getBusinessError: "Ha ocurrido un error obteniendo los datos del comercio. Inténtalo nuevamente.",
+    secureTokenError: "Ha ocurrido un error obteniendo el token de seguridad.",
 })

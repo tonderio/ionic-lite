@@ -8,6 +8,7 @@ import {ICustomerCardsResponse, ISaveCardResponse, ISaveCardSkyflowRequest} from
 export async function fetchCustomerCards(
   baseUrl: string,
   customerToken: string,
+  secureToken: string,
   businessId: string | number,
   signal = null,
 ): Promise<ICustomerCardsResponse> {
@@ -16,15 +17,21 @@ export async function fetchCustomerCards(
     const response = await fetch(url, {
       method: "GET",
       headers: {
-        Authorization: `Token ${customerToken}`,
+        Authorization: `Bearer ${secureToken}`,
         "Content-Type": "application/json",
+        'User-token': customerToken,
       },
       signal,
     });
     if (response.ok) return await response.json();
-    const res_json = await response.json();
+    if (response.status === 401) {
+      return {
+        user_id: 0,
+        cards: [],
+      };
+    }
 
-    throw await buildErrorResponse(response, res_json);
+    throw await buildErrorResponse(response);
   } catch (error) {
     throw buildErrorResponseFromCatch(error);
   }
@@ -32,8 +39,8 @@ export async function fetchCustomerCards(
 
 export async function saveCustomerCard(
   baseUrl: string,
-  secureToken: string,
   customerToken: string,
+  secureToken: string,
   businessId: string | number,
   data: ISaveCardSkyflowRequest,
 ): Promise<ISaveCardResponse> {
@@ -51,9 +58,7 @@ export async function saveCustomerCard(
 
     if (response.ok) return await response.json();
 
-    const res_json = await response.json();
-
-    throw await buildErrorResponse(response, res_json);
+    throw await buildErrorResponse(response);
   } catch (error) {
     throw buildErrorResponseFromCatch(error);
   }
@@ -62,6 +67,7 @@ export async function saveCustomerCard(
 export async function removeCustomerCard(
   baseUrl: string,
   customerToken: string,
+  secureToken: string,
   skyflowId = "",
   businessId: string | number,
 ): Promise<string> {
@@ -71,16 +77,16 @@ export async function removeCustomerCard(
     const response = await fetch(url, {
       method: "DELETE",
       headers: {
-        Authorization: `Token ${customerToken}`,
+        Authorization: `Bearer ${secureToken}`,
         "Content-Type": "application/json",
+        'User-token': customerToken,
       },
     });
 
-    if (response.status === 204) return MESSAGES.cardSaved;
+    if (response.status === 204) return MESSAGES.removedCard;
     if (response.ok && "json" in response) return await response.json();
-    const res_json = await response.json();
 
-    throw await buildErrorResponse(response, res_json);
+    throw await buildErrorResponse(response);
   } catch (error) {
     throw buildErrorResponseFromCatch(error);
   }
