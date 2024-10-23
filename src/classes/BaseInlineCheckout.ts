@@ -9,7 +9,12 @@ import {
   startCheckoutRouter,
 } from "../data/checkoutApi";
 import { getOpenpayDeviceSessionID } from "../data/openPayApi";
-import { getBrowserInfo } from "../helpers/utils";
+import {
+  buildErrorResponse,
+  buildErrorResponseFromCatch,
+  formatPublicErrorResponse,
+  getBrowserInfo
+} from "../helpers/utils";
 import { registerOrFetchCustomer } from "../data/customerApi";
 import { get } from "lodash";
 import {
@@ -18,12 +23,20 @@ import {
   saveCustomerCard,
 } from "../data/cardApi";
 import { fetchCustomerPaymentMethods } from "../data/paymentMethodApi";
-import {Business, IConfigureCheckout, IInlineCheckoutBaseOptions, CustomizationOptions} from "../types/commons";
+import {
+  Business,
+  IConfigureCheckout,
+  IInlineCheckoutBaseOptions,
+  CustomizationOptions,
+} from "../types/commons";
 import {ICustomer} from "../types/customer";
 import {ICardFields, IItem, IProcessPaymentRequest, IStartCheckoutResponse} from "../types/checkout";
 import {ICustomerCardsResponse, ISaveCardResponse, ISaveCardSkyflowRequest} from "../types/card";
 import {IPaymentMethodResponse} from "../types/paymentMethod";
 import {ITransaction} from "../types/transaction";
+import {GetSecureTokenResponse} from "../types/responses";
+import {getSecureToken} from "../data/tokenApi";
+import {MESSAGES} from "../shared/constants/messages";
 export class BaseInlineCheckout {
   baseUrl = "";
   cartTotal: string | number = "0";
@@ -129,6 +142,19 @@ export class BaseInlineCheckout {
         reject(error);
       }
     });
+  }
+
+  async getSecureToken(secretApikey: string): Promise<GetSecureTokenResponse> {
+    try {
+      return await getSecureToken(this.baseUrl, secretApikey)
+    } catch (error) {
+      throw formatPublicErrorResponse(
+          {
+            message: MESSAGES.secureTokenError,
+          },
+          error,
+      );
+    }
   }
 
   async _initializeCheckout() {
@@ -300,19 +326,18 @@ export class BaseInlineCheckout {
     authToken: string,
     businessId: string | number,
   ): Promise<ICustomerCardsResponse> {
-    return await fetchCustomerCards(this.baseUrl, authToken, businessId);
+    return await fetchCustomerCards(this.baseUrl, authToken, this.secureToken, businessId);
   }
 
   async _saveCustomerCard(
     authToken: string,
-    secureToken: string,
     businessId: string | number,
     skyflowTokens: ISaveCardSkyflowRequest,
   ): Promise<ISaveCardResponse> {
     return await saveCustomerCard(
       this.baseUrl,
-      this.secureToken,
       authToken,
+      this.secureToken,
       businessId,
       skyflowTokens,
     );
@@ -326,6 +351,7 @@ export class BaseInlineCheckout {
     return await removeCustomerCard(
       this.baseUrl,
       authToken,
+      this.secureToken,
       skyflowId,
       businessId,
     );

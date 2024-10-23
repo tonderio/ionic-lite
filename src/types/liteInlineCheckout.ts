@@ -22,7 +22,7 @@ import {
   CreateOrderResponse,
   CreatePaymentResponse,
   CustomerRegisterResponse,
-  GetBusinessResponse,
+  GetBusinessResponse, GetSecureTokenResponse,
   RegisterCustomerCardResponse,
   StartCheckoutResponse,
 } from "./responses";
@@ -86,7 +86,7 @@ export interface ILiteCheckout {
    *
    * @public
    */
-  saveCustomerCard(secureToken: string, card: ISaveCardRequest): Promise<ISaveCardResponse>;
+  saveCustomerCard(card: ISaveCardRequest): Promise<ISaveCardResponse>;
 
   /**
    * Removes a card from a customer's account.
@@ -108,6 +108,17 @@ export interface ILiteCheckout {
    * @public
    */
   getCustomerPaymentMethods(): Promise<IPaymentMethod[]>;
+
+  /**
+   * Retrieves security token to access the saved cards functionality.
+   * @param {string} secretApikey
+   * @returns {Promise<import("./index").GetSecureTokenResponse>} A promise that resolves with the token.
+   *
+   * @throws {import("./index").IPublicError} Throws an error object if the operation fails.
+   *
+   * @public
+   */
+  getSecureToken(secretApikey: string): Promise<GetSecureTokenResponse>
 
   /**
    * @deprecated This method is deprecated and will be removed in a future release.
