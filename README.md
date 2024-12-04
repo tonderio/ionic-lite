@@ -239,6 +239,9 @@ if (
 - `payment(data)`: Process a payment
 - `verify3dsTransaction()`: Verify a 3DS transaction
 
+> **Important Note about SaveCard functionality**: 
+> To properly implement the SaveCard feature, you must use a SecureToken. For detailed implementation instructions and best practices, please refer to our official documentation on [How to use SecureToken for secure card saving](https://docs.tonder.io/integration/sdks/secure-token#how-to-use-securetoken-for-secure-card-saving).
+
 
 ## Examples
 
