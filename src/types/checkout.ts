@@ -98,7 +98,7 @@ export interface IItem {
 }
 
 export interface IProcessPaymentRequest {
-    customer: ICustomer;
+    customer: ICustomer | { email: string };
     cart: {
         total: string | number;
         items: IItem[];
