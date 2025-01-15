@@ -105,8 +105,8 @@ export class BaseInlineCheckout {
   }
 
   configureCheckout(data: IConfigureCheckout) {
-    if ("customer" in data) this.#handleCustomer(data["customer"]);
     if ("secureToken" in data) this.#setSecureToken(data["secureToken"]);
+    this.#setCheckoutData(data)
   }
 
   async verify3dsTransaction(): Promise<ITransaction | IStartCheckoutResponse | void> {
@@ -119,12 +119,7 @@ export class BaseInlineCheckout {
   payment(data: IProcessPaymentRequest): Promise<IStartCheckoutResponse> {
     return new Promise(async (resolve, reject) => {
       try {
-        this.#handleCustomer(data.customer);
-        this._setCartTotal(data.cart?.total);
-        this.#setCartItems(data.cart?.items);
-        this.#handleMetadata(data);
-        this.#handleCurrency(data);
-        this.#handleCard(data);
+        this.#setCheckoutData(data)
         const response = await this._checkout(data);
         this.process3ds.setPayload(response);
         const payload = await this._handle3dsRedirect(response);
@@ -305,6 +300,16 @@ export class BaseInlineCheckout {
       console.log(error);
       throw error;
     }
+  }
+
+  #setCheckoutData(data: IConfigureCheckout | IProcessPaymentRequest){
+    if(!data || (data && Object.keys(data).length === 0)) return;
+    this.#handleCustomer(data.customer);
+    this._setCartTotal(data.cart?.total);
+    this.#setCartItems(data.cart?.items);
+    this.#handleMetadata(data);
+    this.#handleCurrency(data);
+    this.#handleCard(data);
   }
 
   async _fetchMerchantData() {

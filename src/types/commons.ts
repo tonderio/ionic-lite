@@ -1,5 +1,5 @@
 import { ICustomer } from "./customer";
-import {IStartCheckoutResponse} from "./checkout";
+import {IProcessPaymentRequest, IStartCheckoutResponse} from "./checkout";
 
 export type Business = {
   business: {
@@ -85,7 +85,7 @@ export type APM = {
   label: string;
 };
 
-export interface IConfigureCheckout {
+export interface IConfigureCheckout extends IProcessPaymentRequest{
   customer: ICustomer | { email: string };
   secureToken: string
 }
