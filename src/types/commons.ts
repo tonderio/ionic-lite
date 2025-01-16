@@ -85,7 +85,7 @@ export type APM = {
   label: string;
 };
 
-export interface IConfigureCheckout extends IProcessPaymentRequest{
+export interface IConfigureCheckout extends Partial<IProcessPaymentRequest>{
   customer: ICustomer | { email: string };
   secureToken: string
 }
