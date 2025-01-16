@@ -305,8 +305,8 @@ export class BaseInlineCheckout {
   #setCheckoutData(data: IConfigureCheckout | IProcessPaymentRequest){
     if(!data || (data && Object.keys(data).length === 0)) return;
     this.#handleCustomer(data.customer);
-    this._setCartTotal(data.cart?.total);
-    this.#setCartItems(data.cart?.items);
+    this._setCartTotal(data.cart?.total || 0);
+    this.#setCartItems(data.cart?.items || []);
     this.#handleMetadata(data);
     this.#handleCurrency(data);
     this.#handleCard(data);
