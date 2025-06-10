@@ -1,5 +1,4 @@
 import { ThreeDSHandler } from "./3dsHandler";
-import { ErrorResponse } from "./errorResponse";
 import { fetchBusiness } from "../data/businessApi";
 import { injectMercadoPagoSecurity } from "../helpers/mercadopago";
 import { TONDER_URL_BY_MODE } from "../shared/constants/tonderUrl";
@@ -10,8 +9,6 @@ import {
 } from "../data/checkoutApi";
 import { getOpenpayDeviceSessionID } from "../data/openPayApi";
 import {
-  buildErrorResponse,
-  buildErrorResponseFromCatch,
   formatPublicErrorResponse,
   getBrowserInfo
 } from "../helpers/utils";
@@ -37,7 +34,8 @@ import {ITransaction} from "../types/transaction";
 import {GetSecureTokenResponse} from "../types/responses";
 import {getSecureToken} from "../data/tokenApi";
 import {MESSAGES} from "../shared/constants/messages";
-export class BaseInlineCheckout {
+import { IMPConfigRequest } from "../types/mercadoPago";
+export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOptions> {
   baseUrl = "";
   cartTotal: string | number = "0";
   process3ds: ThreeDSHandler;
@@ -51,20 +49,15 @@ export class BaseInlineCheckout {
   abortController: AbortController;
   secureToken: string = "";
   customer?: ICustomer | { email: string };
-  customization: CustomizationOptions = {
-    saveCards: {
-      showSaveCardOption: true,
-      showSaved: true,
-      autoSave: false
-    },
+  customization: T  = {
     redirectOnComplete: true
-  }
+  } as T;
 
   cartItems?: IItem[];
   metadata = {};
   card? = {};
   currency?: string = "";
-
+  #apm_config?:IMPConfigRequest | Record<string, any>
   #customerData?: Record<string, any>;
 
   constructor({
@@ -85,23 +78,20 @@ export class BaseInlineCheckout {
     this.customer = {} as ICustomer
     this.baseUrl = baseUrlTonder || TONDER_URL_BY_MODE[this.mode] || TONDER_URL_BY_MODE["stage"];
     this.abortController = new AbortController();
+    this.customization = {
+      ...this.customization,
+      ...(customization || {}),
+    }
+
     this.process3ds = new ThreeDSHandler({
       apiKey: apiKey,
       baseUrl: this.baseUrl,
-      customization: customization,
+      redirectOnComplete: this.customization.redirectOnComplete,
       tdsIframeId: tdsIframeId,
       tonderPayButtonId: tonderPayButtonId,
       callBack: callBack
     });
     this.tdsIframeId = tdsIframeId;
-    this.customization = {
-      ...this.customization,
-      ...(customization || {}),
-      saveCards: {
-        ...this.customization.saveCards,
-        ...(customization?.saveCards || {})
-      }
-    }
   }
 
   configureCheckout(data: IConfigureCheckout) {
@@ -209,7 +199,8 @@ export class BaseInlineCheckout {
       if (
         !deviceSessionIdTonder &&
         openpay_keys.merchant_id &&
-        openpay_keys.public_key
+        openpay_keys.public_key &&
+        !payment_method
       ) {
         deviceSessionIdTonder = await getOpenpayDeviceSessionID(
           openpay_keys.merchant_id,
@@ -283,6 +274,8 @@ export class BaseInlineCheckout {
         browser_info: getBrowserInfo(),
         currency: this.currency!,
         ...(!!payment_method ? { payment_method } : { card }),
+        apm_config: this.#apm_config,
+        ...(this.customer && "identification" in this.customer ? { identification: this.customer.identification } : {})
       };
 
       const jsonResponseRouter = await startCheckoutRouter(
@@ -310,6 +303,7 @@ export class BaseInlineCheckout {
     this.#handleMetadata(data);
     this.#handleCurrency(data);
     this.#handleCard(data);
+    this.#handleApmConfig(data);
   }
 
   async _fetchMerchantData() {
@@ -427,7 +421,10 @@ export class BaseInlineCheckout {
 
   async #resumeCheckout(response: any) {
     // Stop the routing process if the transaction is either hard declined or successful
-    if (response?.decline?.error_type === "Hard") {
+    if (response?.decline?.error_type === "Hard" || 
+       !!response?.checkout?.is_route_finished ||
+      !!response?.is_route_finished ||
+      ["Pending"].includes(response?.transaction_status)) {
       return response;
     }
 
@@ -437,7 +434,7 @@ export class BaseInlineCheckout {
 
     if (response) {
       const routerItems = {
-        checkout_id: response.checkout?.id,
+        checkout_id: response.checkout?.id || response?.checkout_id,
       };
 
       try {
@@ -451,5 +448,8 @@ export class BaseInlineCheckout {
       }
       return response;
     }
+  }
+  #handleApmConfig(data: {apm_config?: IMPConfigRequest | Record<string, any>;}) {
+    this.#apm_config = data?.apm_config;
   }
 }

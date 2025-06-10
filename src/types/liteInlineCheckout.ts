@@ -1,4 +1,4 @@
-import { IConfigureCheckout, IInlineCheckoutBaseOptions } from "./commons";
+import { IConfigureCheckout } from "./commons";
 import {
   ICustomerCardsResponse,
   ISaveCardRequest,

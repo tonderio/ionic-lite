@@ -14,6 +14,14 @@ const PAYMENT_METHODS_CATALOG = {
         label: "CoDi",
         icon: "https://d35a75syrgujp0.cloudfront.net/payment_methods/codi.png",
     },
+    [PAYMENT_METHOD_APM.MERCADOPAGO]: {
+        label: "Mercado Pago",
+        icon: "https://d35a75syrgujp0.cloudfront.net/payment_methods/mercadopago.png",
+    },
+    [PAYMENT_METHOD_APM.OXXOPAY]: {
+        label: "Oxxo Pay",
+        icon: "https://d35a75syrgujp0.cloudfront.net/payment_methods/oxxopay.png",
+    },
     [PAYMENT_METHOD_APM.SPEI]: {
         label: "SPEI",
         icon: "https://d35a75syrgujp0.cloudfront.net/payment_methods/spei.png",
