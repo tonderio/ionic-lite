@@ -1,4 +1,5 @@
 import {ICustomer} from "./customer";
+import { IMPConfigRequest } from "./mercadoPago";
 
 export interface IStartCheckoutRequestBase {
     name: any;
@@ -108,6 +109,7 @@ export interface IProcessPaymentRequest {
     payment_method?: string;
     card?: ICardFields | string;
     isSandbox?: boolean;
+    apm_config?: IMPConfigRequest | Record<string, any>;
     /**
      * @deprecated This property is deprecated and will be removed in a future release.
      * Use the `returnUrl` field when creating the instance of LiteCheckout or InlineCheckout.
