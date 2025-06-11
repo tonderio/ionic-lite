@@ -232,7 +232,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     const customer = await this._getCustomer(this.abortController.signal);
     const { vault_id, vault_url } = this.merchantData!;
     let skyflowTokens;
-    if (!payment_method || payment_method !== "" || payment_method === null) {
+    if (!payment_method || payment_method === "" || payment_method === null) {
       if (typeof card === "string") {
         skyflowTokens = {
           skyflow_id: card,

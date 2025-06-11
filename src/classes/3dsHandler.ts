@@ -1,10 +1,8 @@
-import { CustomizationOptions } from "../types/commons"
-
 type ThreeDSHandlerContructor = {
   payload?: any,
   apiKey?: string,
   baseUrl?: string,
-  customization?: CustomizationOptions,
+  redirectOnComplete?: boolean,
   tdsIframeId?: string, 
   tonderPayButtonId?: string,
   callBack?: (params: any) => any
@@ -17,14 +15,7 @@ export class ThreeDSHandler {
   apiKey?: string
   payload?: any
   localStorageKey: string = "verify_transaction_status_url"
-  customization: CustomizationOptions = {
-    saveCards: {
-      showSaveCardOption: true,
-      showSaved: true,
-      autoSave: false
-    },
-    redirectOnComplete: true
-  }
+  redirectOnComplete?: boolean
   tdsIframeId?: string
   tonderPayButtonId?: string
 
@@ -32,7 +23,7 @@ export class ThreeDSHandler {
     payload = null,
     apiKey,
     baseUrl,
-    customization,
+    redirectOnComplete,
     tdsIframeId,
     tonderPayButtonId,
     callBack
@@ -42,14 +33,7 @@ export class ThreeDSHandler {
     this.payload = payload
     this.tdsIframeId = tdsIframeId
     this.tonderPayButtonId = tonderPayButtonId
-    this.customization = {
-      ...this.customization,
-      ...(customization || {}),
-      saveCards: {
-        ...this.customization.saveCards,
-        ...(customization?.saveCards || {}),
-      },
-    }
+    this.redirectOnComplete = redirectOnComplete
     this.callBack = callBack
   }
 
@@ -160,8 +144,7 @@ export class ThreeDSHandler {
     const url = this.getRedirectUrl()
     if (url) {
       this.saveVerifyTransactionUrl()
-      if(this.customization) {
-        if(this.customization?.redirectOnComplete) {
+        if(this.redirectOnComplete) {
           window.location = url;
         } else {
           const iframe = document.querySelector(`#${this.tdsIframeId}`)
@@ -173,7 +156,6 @@ export class ThreeDSHandler {
             const self = this;
   
             const listenerHandler = async (event: any) => {
-  
               const checkStatus = (result: any) => result?.transaction_status !== "Pending";
   
               const executeAction = () => {
@@ -213,9 +195,6 @@ export class ThreeDSHandler {
             console.log('No iframe found');
           }
         }
-      } else {
-        window.location = url;
-      }
     } else {
       if (this.callBack) this.callBack!(this.payload);
     }
@@ -224,7 +203,7 @@ export class ThreeDSHandler {
   async requestTransactionStatus() {
 
     const verifyUrl = this.getUrlWithExpiration();
-    const url = `${this.baseUrl}${verifyUrl}`;
+    const url = verifyUrl.startsWith("https://") ? verifyUrl : `${this.baseUrl}${verifyUrl}`;
     const response = await fetch(url, {
       method: "GET",
       headers: {
@@ -314,7 +293,7 @@ export class ThreeDSHandler {
   async verifyTransactionStatus() {
     const verifyUrl = this.getUrlWithExpiration();
     if (verifyUrl) {
-      const url = `${this.baseUrl}${verifyUrl}`;
+      const url = verifyUrl.startsWith("https://") ? verifyUrl : `${this.baseUrl}${verifyUrl}`;
       try {
         const response = await fetch(url, {
           method: "GET",

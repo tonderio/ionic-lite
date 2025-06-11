@@ -90,7 +90,7 @@ export interface IConfigureCheckout extends Partial<IProcessPaymentRequest>{
   secureToken: string
 }
 
-export interface IInlineCheckoutBaseOptions {
+export interface IInlineCheckoutBaseOptions<T extends CustomizationOptions = CustomizationOptions> {
   mode?: "production" | "sandbox" | "stage" | "development";
   /**
    * @deprecated This property is deprecated and will be removed in a future release.
@@ -110,7 +110,7 @@ export interface IInlineCheckoutBaseOptions {
   apiKey: string;
   returnUrl?: string;
   callBack?: (response: IStartCheckoutResponse | Record<string, any>) => void;
-  customization?: CustomizationOptions;
+  customization?: T;
   tdsIframeId?: string,
   tonderPayButtonId?: string
 }
@@ -134,10 +134,5 @@ export interface IPublicError {
 }
 
 export type CustomizationOptions = {
-    saveCards?: {
-        showSaveCardOption?: boolean;
-        showSaved?: boolean;
-        autoSave?: boolean;
-    },
     redirectOnComplete?: boolean
 }
