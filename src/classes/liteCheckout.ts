@@ -90,7 +90,13 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       const skyflowTokens: ISaveCardSkyflowRequest = await getSkyflowTokens({
         vault_id: vault_id,
         vault_url: vault_url,
-        data: card,
+        data: {...card, 
+          card_number: card.card_number.replace(/\s+/g, ""),
+          expiration_month: card.expiration_month.replace(/\s+/g, ""),
+          expiration_year: card.expiration_year.replace(/\s+/g, ""),
+          cvv: card.cvv.replace(/\s+/g, ""),
+          cardholder_name: card.cardholder_name.replace(/\s+/g, ""),
+        },
         baseUrl: this.baseUrl,
         apiKey: this.apiKeyTonder,
       });
