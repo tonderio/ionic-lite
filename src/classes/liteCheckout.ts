@@ -45,8 +45,8 @@ declare global {
 export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   activeAPMs: APM[] = [];
 
-  constructor({ apiKey, mode, returnUrl, callBack, apiKeyTonder, baseUrlTonder }: IInlineLiteCheckoutOptions) {
-    super({ mode, apiKey, returnUrl, callBack, apiKeyTonder, baseUrlTonder });
+  constructor({ apiKey, mode, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, collectorIds }: IInlineLiteCheckoutOptions) {
+    super({ mode, apiKey, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, tdsIframeId: collectorIds && 'tdsIframe' in collectorIds ? collectorIds?.tdsIframe : "tdsIframe"});
   }
 
   public async injectCheckout() {

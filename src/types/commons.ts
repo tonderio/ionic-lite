@@ -116,7 +116,11 @@ export interface IInlineCheckoutBaseOptions<T extends CustomizationOptions = Cus
 }
 
 export interface IInlineLiteCheckoutOptions
-    extends IInlineCheckoutBaseOptions {}
+    extends IInlineCheckoutBaseOptions {
+      collectorIds?: {
+          tdsIframe?: string
+      }
+    }
 
 
 export interface IApiError {

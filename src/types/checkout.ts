@@ -115,6 +115,7 @@ export interface IProcessPaymentRequest {
      * Use the `returnUrl` field when creating the instance of LiteCheckout or InlineCheckout.
      */
     returnUrl?: string;
+    order_reference?: string | null;
 }
 
 export interface ICardFields {
