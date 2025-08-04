@@ -141,6 +141,7 @@ When calling the `payment` method, use the following data structure:
     - This is only used when not paying with a payment_method.
 
 - **payment_method**: (for LiteCheckout) String indicating the alternative payment method to be used (e.g., "Spei"). This is only used when not paying with a card.
+- **order_reference**:  Unique order reference from the merchant. Used to visually identify/filter the order in dashboard.
 - **apm_config**: (Optional) Configuration object for APM-specific options. Only applicable when using alternative payment methods like Mercado Pago.
 <details>
 <summary>APM Config Fields - Mercado Pago</summary>

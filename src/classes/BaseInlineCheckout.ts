@@ -55,6 +55,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
 
   cartItems?: IItem[];
   metadata = {};
+  order_reference?: string | null = null;
   card? = {};
   currency?: string = "";
   #apm_config?:IMPConfigRequest | Record<string, any>
@@ -222,6 +223,8 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         reference: reference,
         is_oneclick: true,
         items: this.cartItems!,
+        currency: this.currency,
+        metadata: this.metadata,
       };
       const jsonResponseOrder = await createOrder(
         this.baseUrl,
@@ -239,6 +242,10 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         amount: total,
         date: dateString,
         order_id: jsonResponseOrder.id,
+        customer_order_reference: this.order_reference ? this.order_reference : reference,
+        items: this.cartItems,
+        currency: this.currency,
+        metadata: this.metadata,
       };
       const jsonResponsePayment = await createPayment(
         this.baseUrl,
@@ -270,6 +277,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         business_id: business.pk,
         payment_id: jsonResponsePayment.pk,
         source: "sdk",
+        items: this.cartItems,
         metadata: this.metadata,
         browser_info: getBrowserInfo(),
         currency: this.currency!,
@@ -373,8 +381,9 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     this.cartItems = items;
   }
 
-  #handleMetadata(data: { metadata?: any }) {
+  #handleMetadata(data: { metadata?: any; order_reference?: string | null }) {
     this.metadata = data?.metadata;
+    this.order_reference = data?.order_reference;
   }
 
   #handleCurrency(data: { currency?: string }) {
