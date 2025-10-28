@@ -286,10 +286,12 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     const customer = await this._getCustomer(this.abortController.signal);
     const { vault_id, vault_url } = this.merchantData!;
     let skyflowTokens;
-    if (!payment_method || payment_method === "" || payment_method === null) {
+    if (!payment_method) {
       if (typeof card === "string") {
         const container = this.collectContainer?.container as CollectorContainer;
-        await container.collect()
+        if(container){
+          await container.collect()
+        }
         skyflowTokens = {
           skyflow_id: card,
         };
