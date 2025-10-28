@@ -211,7 +211,7 @@ export async function mountSkyflowFields(event: {
     [CardFieldEnum.EXPIRATION_MONTH]: events?.monthEvents,
     [CardFieldEnum.EXPIRATION_YEAR]: events?.yearEvents,
     [CardFieldEnum.CARDHOLDER_NAME]: events?.cardHolderEvents,
-  }
+  };
 
   if ("fields" in data && Array.isArray(data.fields)) {
     if (data.fields.length > 0 && typeof data.fields[0] === "string") {
@@ -229,13 +229,19 @@ export async function mountSkyflowFields(event: {
         handleSkyflowElementEvents({
           element,
           errorStyles: customStyles.errorStyles,
-          fieldMessage: [CardFieldEnum.CVV, CardFieldEnum.EXPIRATION_MONTH, CardFieldEnum.EXPIRATION_YEAR].includes(field) ? "":labels[field],
+          fieldMessage: [
+            CardFieldEnum.CVV,
+            CardFieldEnum.EXPIRATION_MONTH,
+            CardFieldEnum.EXPIRATION_YEAR,
+          ].includes(field)
+            ? ""
+            : labels[field],
           events: eventsByField[field],
         });
         const containerId =
           `#collect_${String(field)}` +
           (data.card_id ? `_${data.card_id}` : "");
-        element.mount(containerId);
+        await tryMountElement({element, containerId});
         elements.push({ element, containerId });
       }
     } else {
@@ -257,7 +263,7 @@ export async function mountSkyflowFields(event: {
         const containerId =
           fieldObj.container_id ||
           `#collect_${String(key)}` + (data.card_id ? `_${data.card_id}` : "");
-        element.mount(containerId);
+        await tryMountElement({element, containerId});
         elements.push({ element, containerId });
       }
     }
@@ -283,11 +289,11 @@ function handleSkyflowElementEvents(event: {
     errorStyles = {},
     requiredMessage = "Campo requerido",
     invalidMessage = "Campo no válido",
-    events
+    events,
   } = event;
   if ("on" in element) {
     element.on(Skyflow.EventName.CHANGE, (state: any) => {
-      executeEvent({eventName: "onChange", data: state, events});
+      executeEvent({ eventName: "onChange", data: state, events });
       updateErrorLabel({
         element,
         errorStyles,
@@ -296,7 +302,7 @@ function handleSkyflowElementEvents(event: {
     });
 
     element.on(Skyflow.EventName.BLUR, (state: any) => {
-      executeEvent({eventName: "onBlur", data: state, events});
+      executeEvent({ eventName: "onBlur", data: state, events });
       if (!state.isValid) {
         const msj_error = state.isEmpty
           ? requiredMessage
@@ -312,7 +318,7 @@ function handleSkyflowElementEvents(event: {
     });
 
     element.on(Skyflow.EventName.FOCUS, (state: any) => {
-      executeEvent({eventName: "onFocus", data: state, events});
+      executeEvent({ eventName: "onFocus", data: state, events });
       updateErrorLabel({
         element,
         errorStyles,
@@ -361,3 +367,25 @@ const executeEvent = (event: {
     }
   }
 };
+
+async function tryMountElement(event: {
+  element: any;
+  containerId: string;
+  retries?: number;
+  delay?: number;
+}): Promise<void> {
+  const { element, containerId, retries = 2, delay = 30 } = event;
+  for (let i = 0; i <= retries; i++) {
+    const el = document.querySelector(containerId);
+    if (el) {
+      element.mount(containerId);
+      return;
+    }
+    if (i < retries) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  console.warn(
+    `[mountCardFields] Container ${containerId} was not found after ${retries + 1} attempts`,
+  );
+}
