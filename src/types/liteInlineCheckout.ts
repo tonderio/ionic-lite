@@ -223,5 +223,13 @@ export interface ILiteCheckout {
     public_key: string,
     is_sandbox: boolean,
   ): Promise<string | ErrorResponse>;
-}
 
+  /**
+   * Displays and renders card input fields in the checkout.
+   * Uses the provided configuration to show the required fields in the payment form.
+   * @param {import("./card").IMountCardFieldsRequest} event - Configuration for the card fields to render.
+   * @returns {Promise<void>} Resolves when the fields have been successfully rendered.
+   * @public
+   */
+  mountCardFields(event: import("./card").IMountCardFieldsRequest): Promise<void>;
+}
