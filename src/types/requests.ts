@@ -76,7 +76,7 @@ export type TokensSkyflowRequest = {
     apiKey: string;
     vault_id: string,
     vault_url: string,
-    data: {
+    data?: {
         [key: string]: any;
     }
 }

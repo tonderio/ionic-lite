@@ -3,9 +3,7 @@ export function injectMercadoPagoSecurity() {
     const script = document.createElement("script");
     script.src = "https://www.mercadopago.com/v2/security.js";
     script.setAttribute("view", "");
-    script.onload = () => {
-      console.log("Mercado Pago script loaded successfully.");
-    };
+    script.onload = () => {};
     script.onerror = (error) => {
       console.error("Error loading Mercado Pago script:", error);
     };
