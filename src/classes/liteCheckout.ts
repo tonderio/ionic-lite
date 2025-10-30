@@ -289,8 +289,12 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     if (!payment_method) {
       if (typeof card === "string") {
         const container = this.collectContainer?.container as CollectorContainer;
-        if(container){
+        try{
           await container.collect()
+        }catch (e){
+          if(container){
+            console.error("Error collecting card data", e);
+          }
         }
         skyflowTokens = {
           skyflow_id: card,
