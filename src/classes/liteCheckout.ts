@@ -1,40 +1,59 @@
-import { fetchBusiness } from "../data/businessApi";
-
-declare const MP_DEVICE_SESSION_ID: string | undefined;
-import { ErrorResponse } from "./errorResponse";
+import {fetchBusiness} from "../data/businessApi";
+import {ErrorResponse} from "./errorResponse";
 import {
   buildErrorResponse,
   buildErrorResponseFromCatch,
+  formatPublicErrorResponse,
   getBrowserInfo,
   getBusinessId,
-  formatPublicErrorResponse,
   getCardType,
 } from "../helpers/utils";
-import { getCustomerAPMs } from "../data/api";
-import { BaseInlineCheckout } from "./BaseInlineCheckout";
-import { MESSAGES } from "../shared/constants/messages";
-import { getSkyflowTokens } from "../helpers/skyflow";
-import { startCheckoutRouter } from "../data/checkoutApi";
-import { getOpenpayDeviceSessionID } from "../data/openPayApi";
-import { getPaymentMethodDetails } from "../shared/catalog/paymentMethodsCatalog";
-import {APM, IInlineLiteCheckoutOptions, TonderAPM} from "../types/commons";
-import {ICustomerCardsResponse, ISaveCardRequest, ISaveCardResponse, ISaveCardSkyflowRequest} from "../types/card";
+import {getCustomerAPMs} from "../data/api";
+import {BaseInlineCheckout} from "./BaseInlineCheckout";
+import {MESSAGES} from "../shared/constants/messages";
+import {getSkyflowTokens, initSkyflowInstance, mountSkyflowFields} from "../helpers/skyflow";
+import {startCheckoutRouter} from "../data/checkoutApi";
+import {getOpenpayDeviceSessionID} from "../data/openPayApi";
+import {getPaymentMethodDetails} from "../shared/catalog/paymentMethodsCatalog";
+import {
+  APM, IEvents,
+  IInlineLiteCheckoutOptions,
+  ILiteCustomizationOptions,
+  InCollectorContainer,
+  TonderAPM
+} from "../types/commons";
+import {
+  ICustomerCardsResponse,
+  IMountCardFieldsRequest,
+  ISaveCardRequest,
+  ISaveCardResponse,
+  ISaveCardSkyflowRequest
+} from "../types/card";
 import {IPaymentMethod} from "../types/paymentMethod";
 import {
   CreateOrderResponse,
   CreatePaymentResponse,
   CustomerRegisterResponse,
-  GetBusinessResponse, IErrorResponse, RegisterCustomerCardResponse, StartCheckoutResponse
+  GetBusinessResponse,
+  IErrorResponse,
+  RegisterCustomerCardResponse,
+  StartCheckoutResponse
 } from "../types/responses";
 import {
   CreateOrderRequest,
-  CreatePaymentRequest, RegisterCustomerCardRequest, StartCheckoutFullRequest,
+  CreatePaymentRequest,
+  RegisterCustomerCardRequest,
+  StartCheckoutFullRequest,
   StartCheckoutIdRequest,
   StartCheckoutRequest,
   TokensRequest
 } from "../types/requests";
 import {ICardFields, IStartCheckoutResponse} from "../types/checkout";
 import {ILiteCheckout} from "../types/liteInlineCheckout";
+import CollectorContainer from "skyflow-js/types/core/external/collect/collect-container";
+import Skyflow from "skyflow-js";
+
+declare const MP_DEVICE_SESSION_ID: string | undefined;
 
 declare global {
   interface Window {
@@ -44,9 +63,15 @@ declare global {
 
 export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   activeAPMs: APM[] = [];
+  private collectContainer: InCollectorContainer | null;
+  private skyflowInstance: Skyflow | null;
+  private readonly events: IEvents
 
-  constructor({ apiKey, mode, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, collectorIds }: IInlineLiteCheckoutOptions) {
+  constructor({ apiKey, mode, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, collectorIds, events }: IInlineLiteCheckoutOptions) {
     super({ mode, apiKey, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, tdsIframeId: collectorIds && 'tdsIframe' in collectorIds ? collectorIds?.tdsIframe : "tdsIframe"});
+    this.collectContainer = null;
+    this.skyflowInstance = null;
+    this.events = events || {}
   }
 
   public async injectCheckout() {
@@ -169,6 +194,16 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     }
   }
 
+  public async mountCardFields(event: IMountCardFieldsRequest): Promise<void> {
+    await this.createSkyflowInstance();
+    this.collectContainer = await mountSkyflowFields({
+        skyflowInstance: this.skyflowInstance!,
+        data: event,
+        customization: this.customization,
+        events: this.events,
+    });
+  }
+
   public async getBusiness(): Promise<GetBusinessResponse> {
     try {
       return await fetchBusiness(
@@ -184,6 +219,19 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         e,
       );
     }
+  }
+
+
+  private async createSkyflowInstance() {
+    if(this.skyflowInstance) return this.skyflowInstance
+    await this._fetchMerchantData();
+    const { vault_id, vault_url } = this.merchantData!;
+    this.skyflowInstance = await initSkyflowInstance({
+      vault_id: vault_id,
+      vault_url: vault_url,
+      baseUrl: this.baseUrl,
+      apiKey: this.apiKeyTonder,
+    })
   }
 
   // TODO: DEPRECATED
@@ -238,8 +286,16 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     const customer = await this._getCustomer(this.abortController.signal);
     const { vault_id, vault_url } = this.merchantData!;
     let skyflowTokens;
-    if (!payment_method || payment_method === "" || payment_method === null) {
+    if (!payment_method) {
       if (typeof card === "string") {
+        const container = this.collectContainer?.container as CollectorContainer;
+        try{
+          await container.collect()
+        }catch (e){
+          if(container){
+            console.error("Error collecting card data", e);
+          }
+        }
         skyflowTokens = {
           skyflow_id: card,
         };

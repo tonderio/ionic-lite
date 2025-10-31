@@ -239,7 +239,6 @@ export class ThreeDSHandler {
 
   handleSuccessTransaction(response: any) {
     this.removeVerifyTransactionUrl();
-    console.log('Transacción autorizada.');
     return response;
   }
 

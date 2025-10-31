@@ -25,7 +25,7 @@ You can install using NPM
 npm i @tonder.io/ionic-lite-sdk
 ```
 
-Add dependencies to the root of the app (index.html)
+Add dependencies to the root of the app (index.html) only if you are going to use Openpay as the payment processor.
 ```html
 <script src=https://openpay.s3.amazonaws.com/openpay.v1.min.js></script>
 <script src=https://openpay.s3.amazonaws.com/openpay-data.v1.min.js></script>
@@ -297,9 +297,38 @@ if (
 - `getCustomerPaymentMethods()`: Get available payment methods
 - `payment(data)`: Process a payment
 - `verify3dsTransaction()`: Verify a 3DS transaction
+- `mountCardFields({ fields, card_id })`: Mounts card input fields (e.g., CVV) for a saved card. Useful for requesting CVV when listing saved cards. 
 
-> **Important Note about SaveCard functionality**: 
-> To properly implement the SaveCard feature, you must use a SecureToken. For detailed implementation instructions and best practices, please refer to our official documentation on [How to use SecureToken for secure card saving](https://docs.tonder.io/integration/sdks/secure-token#how-to-use-securetoken-for-secure-card-saving).
+#### mountCardFields
+
+Mounts card input fields (currently CVV) for a saved card. When a `card_id` is provided, the CVV input will be associated with that specific card, allowing you to update its CVV. This is useful for workflows where you need to request CVV for saved cards before payment.
+
+**Parameters:**
+
+| Name    | Type     | Required | Description                                                         |
+|---------|----------|----------|---------------------------------------------------------------------|
+| fields  | string[] | Yes      | Array of fields to mount (currently supports `["cvv"]`).            |
+| card_id | string   | No       | Card ID of the saved card. Associates the CVV input with this card. |
+
+**Important Notes:**
+1. **Single Card Selection Only:** The CVV input for a saved card must only be displayed when a specific card is selected.
+2. **One CVV Input at a Time:** You cannot display multiple CVV inputs for different cards simultaneously. Only one CVV update operation should be active at any given time.
+3. **Mutually Exclusive with Card Form:** The CVV input for a saved card cannot be shown at the same time as the full card enrollment form. These are two separate workflows:
+   - **Save New Card:** Use the complete card form without `card_id`.
+   - **Update CVV for Saved Card:** Use CVV input with `card_id` only.
+
+**Example:**
+```tsx
+// Update CVV for a saved card
+
+// 1. Place the div in your component where the CVV field will be mounted
+<div id={`collect_cvv_saved-card-id`}></div>
+
+// 2. Call mountCardFields and pass the card_id of the selected card
+liteCheckout.mountCardFields({ fields: ["cvv"], card_id: "saved-card-id" });
+
+
+```
 
 
 ## Examples
@@ -493,6 +522,176 @@ export class TonderCheckoutComponent implements OnInit, OnDestroy {
 }
 ```
 
+### React: Request CVV for saved card
+
+```tsx
+import { LiteCheckout } from '@tonder.io/ionic-lite-sdk';
+import { useEffect, useState } from 'react';
+
+const checkoutData = {
+  customer: {
+      firstName: "Adrian",
+      lastName: "Martinez",
+      country: "Mexico",
+      address: "Pinos 507, Col El Tecuan",
+      city: "Durango",
+      state: "Durango",
+      postCode: "34105",
+      email: "test@example.com",
+      phone: "8161234567",
+  },
+  cart: {
+    total: 120,
+    items: [
+      {
+        description: "Test product description",
+        quantity: 1,
+        price_unit: 120,
+        discount: 25,
+        taxes: 12,
+        product_reference: 12,
+        name: "Test product",
+        amount_total: 120
+      }
+    ]
+  },
+  currency: "MXN",
+  // Reference from the merchant
+  order_reference: "ORD-123456",
+  metadata: {
+      business_user: "123456-test"
+  },
+};
+
+const ExploreContainer = () => {
+  const [liteCheckout, setLiteCheckout] = useState<any>(null);
+  const [cards, setCards] = useState<any[]>([]);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!liteCheckout) {
+      setLoading(true);
+      initializeTonderSDK();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (liteCheckout) {
+      fetchCards();
+    }
+  }, [liteCheckout]);
+
+  const initializeTonderSDK = async () => {
+    const sdk = new LiteCheckout({
+      mode: "stage",
+      apiKey: "YOUR_API_KEY",
+      returnUrl: window.location.href,
+      customization: { redirectOnComplete: false },
+      events: {
+        cvvEvents: {
+          onChange: (data) => {
+            console.log("CVV onChange event data:", data);
+          }
+        }
+      }
+    });
+    setLiteCheckout(sdk);
+
+    // Get secure token from your backend
+    const token = "123"
+
+    sdk.configureCheckout({ ...checkoutData, secureToken: token });
+    await sdk.injectCheckout();
+    sdk.verify3dsTransaction().then((response: any) => {
+      console.log('Verify 3ds response', response);
+    });
+    setLoading(false);
+  };
+
+  const fetchCards = async () => {
+    const response = await liteCheckout.getCustomerCards();
+    setCards(response.cards || []);
+  };
+
+  const handleSelectCard = (cardId: string) => {
+    if (cardId === selectedCardId) return;
+    setSelectedCardId(cardId);
+    liteCheckout.mountCardFields({ fields: ["cvv"], card_id: cardId });
+  };
+
+  const handlePayment = async () => {
+    if (!selectedCardId) return;
+    try {
+      const response = await liteCheckout.payment({ ...checkoutData, card: selectedCardId });
+    } catch (err) {
+      console.error("Payment error:", err);
+    }
+  };
+
+  return (
+    <div className="container">
+      <iframe className="tds-iframe" allowTransparency={true} id="tdsIframe"></iframe>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: '#007AFF' }}>
+          <div style={{ fontWeight: 600, fontSize: 18 }}>Loading checkout...</div>
+        </div>
+      ) : (
+        <>
+          <p>Saved cards:</p>
+          <div style={{ marginBottom: 24 }}>
+            {cards.length > 0 ? (
+              cards.map((card: any) => (
+                <div
+                  key={card.fields.skyflow_id}
+                  style={{
+                    background: selectedCardId === card.fields.skyflow_id ? '#E3F2FD' : '#f9f9f9',
+                    borderRadius: 12,
+                    border: selectedCardId === card.fields.skyflow_id ? '2px solid #007AFF' : '2px solid transparent',
+                    marginBottom: 12,
+                    padding: 0,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                  onClick={() => handleSelectCard(card.fields.skyflow_id)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', padding: 16 }}>
+                    {card.icon && (
+                      <img src={card.icon} alt="card" style={{ width: 50, height: 32, marginRight: 16, objectFit: 'contain' }} />
+                    )}
+                    <div style={{ flex: 1, textAlign: 'left' }}>
+                      <div style={{ fontWeight: 'bold', color: '#333', marginBottom: 4 }}>{card.fields.cardholder_name}</div>
+                      <div style={{ color: '#666', marginBottom: 4 }}>•••• •••• •••• {card.fields.card_number.slice(-4)}</div>
+                      <div style={{ color: '#999', fontSize: 12 }}>Expires: {card.fields.expiration_month}/{card.fields.expiration_year}</div>
+                    </div>
+                    {selectedCardId === card.fields.skyflow_id && (
+                      <div
+                        style={{ marginLeft: 12, width: 120, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee', padding: 8, textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <div style={{ maxHeight: '90px' }} id={`collect_cvv_${card.fields.skyflow_id}`}></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>No saved cards</div>
+                <div style={{ fontSize: 14, color: '#bbb' }}>Add a card to use this method</div>
+              </div>
+            )}
+          </div>
+          <button style={{ padding: '10px', background: '#ddd' }} onClick={handlePayment}>
+            Pay with saved card
+          </button>
+        </>
+      )}
+    </div>
+  );
+};
+```
+
 ## Request secure token
 
 ```typescript
@@ -580,14 +779,6 @@ The following functions have been deprecated and should no longer be used. Consi
 - Replace `apiKey`, `mode`, `returnUrl` with your actual values.
 - Remember to use the `configureCheckout` function after creating an instance of `LiteCheckout`. This ensures that functions such as payment processing, saving cards, deleting cards, and others work correctly.
 
-### Script Dependencies
-
-For all implementations, ensure you include the necessary scripts:
-
-```html
-<script src="https://openpay.s3.amazonaws.com/openpay.v1.min.js"></script>
-<script src="https://openpay.s3.amazonaws.com/openpay-data.v1.min.js"></script>
-```
 
 ## License
 

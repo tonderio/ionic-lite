@@ -1,5 +1,13 @@
 import { ICustomer } from "./customer";
 import {IProcessPaymentRequest, IStartCheckoutResponse} from "./checkout";
+import CollectorContainer from "skyflow-js/types/core/external/collect/collect-container";
+import ComposableContainer from "skyflow-js/types/core/external/collect/compose-collect-container";
+import RevealContainer from "skyflow-js/types/core/external/reveal/reveal-container";
+import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
+import ComposableElement from "skyflow-js/types/core/external/collect/compose-collect-element";
+import RevealElement from "skyflow-js/types/core/external/reveal/reveal-element";
+import {LabelStyles} from "skyflow-js/types/utils/common";
+
 
 export type Business = {
   business: {
@@ -120,9 +128,29 @@ export interface IInlineLiteCheckoutOptions
       collectorIds?: {
           tdsIframe?: string
       }
+      customization?: ILiteCustomizationOptions;
+      events?: IEvents;
     }
 
-
+export interface ICardFormEvents {
+  cardHolderEvents?: IInputEvents;
+  cardNumberEvents?: IInputEvents;
+  cvvEvents?: IInputEvents;
+  monthEvents?: IInputEvents;
+  yearEvents?: IInputEvents;
+}
+export interface IInputEvents {
+  onChange?: (event: IEventSecureInput) => void;
+  onFocus?: (event: IEventSecureInput) => void;
+  onBlur?: (event: IEventSecureInput) => void;
+}
+export interface IEventSecureInput {
+  elementType: string;
+  isEmpty: boolean;
+  isFocused: boolean;
+  isValid: boolean;
+}
+export interface IEvents extends ICardFormEvents {}
 export interface IApiError {
   code: string;
   body: Record<string, string> | string;
@@ -139,4 +167,70 @@ export interface IPublicError {
 
 export type CustomizationOptions = {
     redirectOnComplete?: boolean
+}
+
+export interface InCollectorContainer {
+  container: CollectorContainer | ComposableContainer | RevealContainer;
+  elements: (CollectElement | ComposableElement | RevealElement)[];
+}
+
+export interface ILiteCustomizationOptions extends CustomizationOptions {
+  styles?: IStyles;
+  labels?: IFormLabels;
+  placeholders?: IFormPlaceholder;
+}
+
+export interface IFormLabels {
+  name?: string;
+  card_number?: string;
+  cvv?: string;
+  expiry_date?: string;
+  expiration_year?: string;
+  expiration_month?: string;
+}
+
+export interface IFormPlaceholder {
+  name?: string;
+  card_number?: string;
+  cvv?: string;
+  expiration_month?: string;
+  expiration_year?: string;
+}
+
+export interface IStyles {
+  cardForm?: ILiteCardFormStyles;
+}
+
+export interface ILiteCardFormStyles extends StylesBaseVariant, IElementStyle {}
+
+export interface StylesBaseVariant {
+  base?: Record<string, any>;
+}
+
+export interface IElementStyle {
+  inputStyles?: CollectInputStylesVariant;
+  labelStyles?: LabelStyles;
+  errorStyles?: StylesBaseVariant;
+}
+export interface StylesFocusVariant {
+  focus?: Record<string, any>;
+}
+
+export interface CollectInputStylesVariant
+    extends StylesBaseVariant,
+        StylesFocusVariant {
+  complete?: Record<string, any>;
+  invalid?: Record<string, any>;
+  empty?: Record<string, any>;
+  cardIcon?: Record<string, any>;
+  dropdownIcon?: Record<string, any>;
+  dropdown?: Record<string, any>;
+  dropdownListItem?: Record<string, any>;
+  global: Record<string, any>;
+}
+
+export interface CollectLabelStylesVariant
+    extends StylesBaseVariant,
+        StylesFocusVariant {
+  requiredAsterisk?: Record<string, any>;
 }
