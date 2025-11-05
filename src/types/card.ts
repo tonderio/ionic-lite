@@ -40,8 +40,9 @@ export enum CardFieldEnum {
     EXPIRATION_YEAR = 'expiration_year',
     CARDHOLDER_NAME = 'cardholder_name',
 }
+export type CardField = "cvv" | "card_number" | "expiration_month" | "expiration_year" | "cardholder_name";
 
 export interface IMountCardFieldsRequest {
-    fields: CardFieldEnum[] | { container_id?: string; field: CardFieldEnum}[],
+    fields: (CardField | { container_id?: string; field: CardField })[],
     card_id?: string;
 }
