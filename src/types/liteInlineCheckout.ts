@@ -232,4 +232,12 @@ export interface ILiteCheckout {
    * @public
    */
   mountCardFields(event: import("./card").IMountCardFieldsRequest): Promise<void>;
+
+  /**
+   * Unmounts card input fields from the DOM.
+   * @param {string} context - Optional. Context to unmount: 'all' (default), 'create', 'current', or 'update:card_id'.
+   * @returns {void}
+   * @public
+   */
+  unmountCardFields(context?: string): void;
 }
