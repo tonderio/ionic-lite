@@ -1,5 +1,7 @@
 import {fetchBusiness} from "../data/businessApi";
 import {ErrorResponse} from "./errorResponse";
+import TonderError from "../shared/utils/errors";
+import {ErrorKeyEnum} from "../shared/enum/ErrorKeyEnum";
 import {
   buildErrorResponse,
   buildErrorResponseFromCatch,
@@ -356,8 +358,16 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
           if (container) {
             await container.collect();
           }
-        }catch (e){
-            console.error("Error collecting card data", e);
+        }catch (e: any){
+          if (container) {
+            const errorDescription = e?.error?.description;
+            throw new TonderError({
+              code: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
+              details: {
+                message: errorDescription
+              }
+            });
+          }
         }
         skyflowTokens = {
           skyflow_id: card,
