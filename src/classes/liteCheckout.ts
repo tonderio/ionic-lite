@@ -63,13 +63,13 @@ declare global {
 
 export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   activeAPMs: APM[] = [];
-  private collectContainer: InCollectorContainer | null;
   private skyflowInstance: Skyflow | null;
   private readonly events: IEvents
+  // Store mounted elements by context: 'create' or 'update:card_id'
+  private mountedElementsByContext: Map<string, { elements: any[], container: InCollectorContainer | null }> = new Map();
 
   constructor({ apiKey, mode, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, collectorIds, events }: IInlineLiteCheckoutOptions) {
     super({ mode, apiKey, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, tdsIframeId: collectorIds && 'tdsIframe' in collectorIds ? collectorIds?.tdsIframe : "tdsIframe"});
-    this.collectContainer = null;
     this.skyflowInstance = null;
     this.events = events || {}
   }
@@ -193,15 +193,76 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       );
     }
   }
-
   public async mountCardFields(event: IMountCardFieldsRequest): Promise<void> {
+    // Determine the context: 'create' or 'update:card_id'
+    const context = event.card_id ? `update:${event.card_id}` : 'create';
+
+    const unmountContext: string = event.unmount_context ?? 'all';
+
+    if (unmountContext !== 'none') {
+      if (unmountContext === 'current') {
+        // Unmount only the current context
+        this.unmountCardFields(context);
+      } else {
+        // Unmount specified context ('all', 'create', 'update:card_id', etc.)
+        this.unmountCardFields(unmountContext);
+      }
+    }
+
     await this.createSkyflowInstance();
-    this.collectContainer = await mountSkyflowFields({
+    const containerData = await mountSkyflowFields({
         skyflowInstance: this.skyflowInstance!,
         data: event,
         customization: this.customization,
         events: this.events,
     });
+
+    // Store elements by context for future cleanup
+    this.mountedElementsByContext.set(context, {
+      elements: containerData.elements || [],
+      container: containerData
+    });
+  }
+
+
+  private getContainerByCardId(cardId: string): CollectorContainer | null {
+    const context = `update:${cardId}`;
+    const contextData = this.mountedElementsByContext.get(context);
+    return (contextData?.container?.container as CollectorContainer) || null;
+  }
+
+  public unmountCardFields(context: string = 'all'): void {
+    if (context === 'all') {
+      this.mountedElementsByContext.forEach((contextData, ctx) => {
+        this.unmountContext(ctx);
+      });
+      this.mountedElementsByContext.clear();
+    } else {
+      this.unmountContext(context);
+      this.mountedElementsByContext.delete(context);
+    }
+  }
+
+  /**
+   * Internal helper to unmount elements from a specific context
+   * @private
+   */
+  private unmountContext(context: string): void {
+    const contextData = this.mountedElementsByContext.get(context);
+    if (!contextData) return;
+
+    const { elements } = contextData;
+    if (elements && elements.length > 0) {
+      elements.forEach((element) => {
+        try {
+          if (element && typeof element.unmount === 'function') {
+            element.unmount();
+          }
+        } catch (error) {
+          console.warn(`Error unmounting Skyflow element from context '${context}':`, error);
+        }
+      });
+    }
   }
 
   public async getBusiness(): Promise<GetBusinessResponse> {
@@ -288,13 +349,15 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     let skyflowTokens;
     if (!payment_method) {
       if (typeof card === "string") {
-        const container = this.collectContainer?.container as CollectorContainer;
+        // Get the container from the specific context for this card
+        const container = this.getContainerByCardId(card);
+
         try{
-          await container.collect()
-        }catch (e){
-          if(container){
-            console.error("Error collecting card data", e);
+          if (container) {
+            await container.collect();
           }
+        }catch (e){
+            console.error("Error collecting card data", e);
         }
         skyflowTokens = {
           skyflow_id: card,
