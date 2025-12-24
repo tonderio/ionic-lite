@@ -28,13 +28,14 @@ import {
 } from "../types/commons";
 import {ICustomer} from "../types/customer";
 import {ICardFields, IItem, IProcessPaymentRequest, IStartCheckoutResponse} from "../types/checkout";
-import {ICustomerCardsResponse, ISaveCardResponse, ISaveCardSkyflowRequest} from "../types/card";
+import {ICustomerCardsResponse, ISaveCardInternalResponse, ISaveCardSkyflowRequest} from "../types/card";
 import {IPaymentMethodResponse} from "../types/paymentMethod";
 import {ITransaction} from "../types/transaction";
 import {GetSecureTokenResponse} from "../types/responses";
 import {getSecureToken} from "../data/tokenApi";
 import {MESSAGES} from "../shared/constants/messages";
 import { IMPConfigRequest } from "../types/mercadoPago";
+import { CardOnFile } from "../helpers/card_on_file";
 export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOptions> {
   baseUrl = "";
   cartTotal: string | number = "0";
@@ -58,6 +59,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   order_reference?: string | null = null;
   card? = {};
   currency?: string = "";
+  protected cardOnFileInstance: CardOnFile | null = null;
   #apm_config?:IMPConfigRequest | Record<string, any>
   #customerData?: Record<string, any>;
 
@@ -153,6 +155,10 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     ) {
       injectMercadoPagoSecurity();
     }
+
+    if (this._hasCardOnFileKeys()) {
+      await this._initializeCardOnFile();
+    }
   }
 
   async _checkout(data: any): Promise<any> {
@@ -184,14 +190,16 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     payment_method,
     customer,
     isSandbox,
+    enable_card_on_file,
     // TODO: DEPRECATED
     returnUrl: returnUrlData
   }: {
-    card?: string;
+    card?: Record<string, any>;
     payment_method?: string;
     customer: Record<string, any>;
     isSandbox?: boolean;
     returnUrl?: string;
+    enable_card_on_file?: boolean;
   }) {
     const { openpay_keys, reference, business } = this.merchantData!;
     const total = Number(this.cartTotal);
@@ -283,7 +291,8 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         currency: this.currency!,
         ...(!!payment_method ? { payment_method } : { card }),
         apm_config: this.#apm_config,
-        ...(this.customer && "identification" in this.customer ? { identification: this.customer.identification } : {})
+        ...(this.customer && "identification" in this.customer ? { identification: this.customer.identification } : {}),
+        ...(enable_card_on_file !== undefined ? { enable_card_on_file } : {}),
       };
 
       const jsonResponseRouter = await startCheckoutRouter(
@@ -340,13 +349,15 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     authToken: string,
     businessId: string | number,
     skyflowTokens: ISaveCardSkyflowRequest,
-  ): Promise<ISaveCardResponse> {
+    appOrigin: boolean = false,
+  ): Promise<ISaveCardInternalResponse> {
     return await saveCustomerCard(
       this.baseUrl,
       authToken,
       this.secureToken,
       businessId,
       skyflowTokens,
+      appOrigin
     );
   }
 
@@ -365,6 +376,23 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }
   async _fetchCustomerPaymentMethods(): Promise<IPaymentMethodResponse> {
     return await fetchCustomerPaymentMethods(this.baseUrl, this.apiKeyTonder);
+  }
+
+  protected _hasCardOnFileKeys(): boolean {
+    return !!this.merchantData?.cardonfile_keys?.public_key;
+  }
+
+  protected async _initializeCardOnFile(): Promise<CardOnFile> {
+    if (!this.cardOnFileInstance) {
+      this.cardOnFileInstance = new CardOnFile({
+        merchantId: this.merchantData?.cardonfile_keys!.public_key!,
+        apiKey: this.apiKeyTonder,
+        isTestEnvironment: this.mode !== "production",
+      });
+      await this.cardOnFileInstance.initialize();
+    }
+
+    return this.cardOnFileInstance;
   }
 
   #handleCustomer(customer: ICustomer | { email: string }) {

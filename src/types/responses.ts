@@ -15,6 +15,8 @@ export type CustomerRegisterResponse = {
     id: number | string;
     email: string;
     auth_token: string;
+    first_name?:string;
+    last_name?: string;
 };
 
 export type CreateOrderResponse = {

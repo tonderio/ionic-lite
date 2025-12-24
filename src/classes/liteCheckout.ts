@@ -3,12 +3,12 @@ import {ErrorResponse} from "./errorResponse";
 import TonderError from "../shared/utils/errors";
 import {ErrorKeyEnum} from "../shared/enum/ErrorKeyEnum";
 import {
-  buildErrorResponse,
-  buildErrorResponseFromCatch,
-  formatPublicErrorResponse,
-  getBrowserInfo,
-  getBusinessId,
-  getCardType,
+    buildErrorResponse,
+    buildErrorResponseFromCatch,
+    formatPublicErrorResponse,
+    getBrowserInfo,
+    getBusinessId,
+    getCardType,
 } from "../helpers/utils";
 import {getCustomerAPMs} from "../data/api";
 import {BaseInlineCheckout} from "./BaseInlineCheckout";
@@ -17,38 +17,32 @@ import {getSkyflowTokens, initSkyflowInstance, mountSkyflowFields} from "../help
 import {startCheckoutRouter} from "../data/checkoutApi";
 import {getOpenpayDeviceSessionID} from "../data/openPayApi";
 import {getPaymentMethodDetails} from "../shared/catalog/paymentMethodsCatalog";
+import {APM, IEvents, IInlineLiteCheckoutOptions, InCollectorContainer, TonderAPM} from "../types/commons";
 import {
-  APM, IEvents,
-  IInlineLiteCheckoutOptions,
-  ILiteCustomizationOptions,
-  InCollectorContainer,
-  TonderAPM
-} from "../types/commons";
-import {
-  ICustomerCardsResponse,
-  IMountCardFieldsRequest,
-  ISaveCardRequest,
-  ISaveCardResponse,
-  ISaveCardSkyflowRequest
+    ICustomerCardsResponse,
+    IMountCardFieldsRequest,
+    ISaveCardRequest,
+    ISaveCardResponse,
+    ISaveCardSkyflowRequest
 } from "../types/card";
 import {IPaymentMethod} from "../types/paymentMethod";
 import {
-  CreateOrderResponse,
-  CreatePaymentResponse,
-  CustomerRegisterResponse,
-  GetBusinessResponse,
-  IErrorResponse,
-  RegisterCustomerCardResponse,
-  StartCheckoutResponse
+    CreateOrderResponse,
+    CreatePaymentResponse,
+    CustomerRegisterResponse,
+    GetBusinessResponse,
+    IErrorResponse,
+    RegisterCustomerCardResponse,
+    StartCheckoutResponse
 } from "../types/responses";
 import {
-  CreateOrderRequest,
-  CreatePaymentRequest,
-  RegisterCustomerCardRequest,
-  StartCheckoutFullRequest,
-  StartCheckoutIdRequest,
-  StartCheckoutRequest,
-  TokensRequest
+    CreateOrderRequest,
+    CreatePaymentRequest,
+    RegisterCustomerCardRequest,
+    StartCheckoutFullRequest,
+    StartCheckoutIdRequest,
+    StartCheckoutRequest,
+    TokensRequest
 } from "../types/requests";
 import {ICardFields, IStartCheckoutResponse} from "../types/checkout";
 import {ILiteCheckout} from "../types/liteInlineCheckout";
@@ -69,6 +63,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   private readonly events: IEvents
   // Store mounted elements by context: 'create' or 'update:card_id'
   private mountedElementsByContext: Map<string, { elements: any[], container: InCollectorContainer | null }> = new Map();
+  private customerCardsCache: ICustomerCardsResponse | null = null;
 
   constructor({ apiKey, mode, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, collectorIds, events }: IInlineLiteCheckoutOptions) {
     super({ mode, apiKey, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, tdsIframeId: collectorIds && 'tdsIframe' in collectorIds ? collectorIds?.tdsIframe : "tdsIframe"});
@@ -88,13 +83,14 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         auth_token,
         this.merchantData!.business.pk,
       );
+      this.customerCardsCache = response;
 
       return {
-        ...response,
-        cards: response.cards.map((ic) => ({
-          ...ic,
-          icon: getCardType(ic.fields.card_scheme),
-        })),
+          ...response,
+          cards: response.cards.map((ic) => ({
+              ...ic,
+              icon: getCardType(ic.fields.card_scheme),
+          })),
       };
     } catch (error) {
       throw formatPublicErrorResponse(
@@ -111,28 +107,71 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   ): Promise<ISaveCardResponse> {
     try {
       await this._fetchMerchantData();
-      const { auth_token } = await this._getCustomer();
+      const customerResponse = await this._getCustomer() as CustomerRegisterResponse;
+      const { auth_token, first_name = "", last_name = "", email = "" } = customerResponse;
       const { vault_id, vault_url, business } = this.merchantData!;
+      const cardOnFileEnabled = this._hasCardOnFileKeys();
 
-      const skyflowTokens: ISaveCardSkyflowRequest = await getSkyflowTokens({
+      const sanitizedCard = {
+        card_number: card.card_number.replace(/\s+/g, ""),
+        expiration_month: card.expiration_month.replace(/\s+/g, ""),
+        expiration_year: card.expiration_year.replace(/\s+/g, ""),
+        cvv: card.cvv.replace(/\s+/g, ""),
+        cardholder_name: card.cardholder_name.replace(/\s+/g, ""),
+      };
+
+      const skyflowTokens: any = await getSkyflowTokens({
         vault_id: vault_id,
         vault_url: vault_url,
-        data: {...card, 
-          card_number: card.card_number.replace(/\s+/g, ""),
-          expiration_month: card.expiration_month.replace(/\s+/g, ""),
-          expiration_year: card.expiration_year.replace(/\s+/g, ""),
-          cvv: card.cvv.replace(/\s+/g, ""),
-          cardholder_name: card.cardholder_name.replace(/\s+/g, ""),
-        },
+        data: sanitizedCard,
         baseUrl: this.baseUrl,
         apiKey: this.apiKeyTonder,
       });
 
-      return await this._saveCustomerCard(
+      const saveResponse = await this._saveCustomerCard(
         auth_token,
         business?.pk,
         skyflowTokens,
+        cardOnFileEnabled,
       );
+
+      if (cardOnFileEnabled) {
+        const cardBin = saveResponse.card_bin;
+        if (!cardBin) {
+          throw new Error("Card BIN not returned from save card");
+        }
+
+        const cardOnFile = await this._initializeCardOnFile();
+        const result = await cardOnFile.process({
+          cardTokens: {
+              name: skyflowTokens.cardholder_name,
+              number: skyflowTokens.card_number,
+              expiryMonth: skyflowTokens.expiration_month,
+              expiryYear: skyflowTokens.expiration_year,
+              cvv: skyflowTokens.cvv,
+          },
+          cardBin,
+          contactDetails: {
+            firstName: first_name || "",
+            lastName: last_name || "",
+            email: email || "",
+          },
+          customerId: auth_token,
+          currency: this.currency || "MXN",
+        });
+
+        const updatePayload: ISaveCardSkyflowRequest  = {
+          skyflow_id: skyflowTokens.skyflow_id,
+          subscription_id: result.subscriptionId,
+        };
+        await this._saveCustomerCard(
+          auth_token,
+          business?.pk,
+          updatePayload,
+        );
+      }
+
+      return saveResponse;
     } catch (error) {
       throw formatPublicErrorResponse(
         {
@@ -231,6 +270,26 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     const context = `update:${cardId}`;
     const contextData = this.mountedElementsByContext.get(context);
     return (contextData?.container?.container as CollectorContainer) || null;
+  }
+
+  private async collectCardTokens(cardId: string): Promise<Record<string, any> | null> {
+    const container = this.getContainerByCardId(cardId);
+    if (!container) {
+      return null;
+    }
+
+    try {
+      const collectResponse: any = await container.collect();
+      return collectResponse?.records?.[0]?.fields || null;
+    } catch (e: any) {
+      const errorDescription = e?.error?.description;
+      throw new TonderError({
+        code: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
+        details: {
+          message: errorDescription
+        }
+      });
+    }
   }
 
   public unmountCardFields(context: string = 'all'): void {
@@ -346,40 +405,120 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     returnUrl?: string;
   }) {
     await this._fetchMerchantData();
-    const customer = await this._getCustomer(this.abortController.signal);
-    const { vault_id, vault_url } = this.merchantData!;
+    const customer = await this._getCustomer(this.abortController.signal) as CustomerRegisterResponse;
+    const { vault_id, vault_url, business } = this.merchantData!;
+    const { auth_token, first_name = "", last_name = "", email = "" } = customer;
+    const cardOnFileEnabled = this._hasCardOnFileKeys();
     let skyflowTokens;
+    let subscriptionCard: { subscriptionId: string } | null = null;
+    let skyflowId: string | null = null;
+    let cardTokensForCardOnFile: { name: string; number: string; expiryMonth: string; expiryYear: string; cvv: string } | null = null;
+    let shouldProcessCardOnFile = false;
+
+    const ensureCustomerCards = async () => {
+      if (!this.customerCardsCache?.cards?.length) {
+          this.customerCardsCache = await this._getCustomerCards(
+          auth_token,
+          this.merchantData!.business.pk,
+        );
+      }
+    };
+
     if (!payment_method) {
       if (typeof card === "string") {
-        // Get the container from the specific context for this card
-        const container = this.getContainerByCardId(card);
-
-        try{
-          if (container) {
-            await container.collect();
-          }
-        }catch (e: any){
-          if (container) {
-            const errorDescription = e?.error?.description;
-            throw new TonderError({
-              code: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
-              details: {
-                message: errorDescription
-              }
-            });
-          }
-        }
+        skyflowId = card;
         skyflowTokens = {
           skyflow_id: card,
         };
+
+        if (cardOnFileEnabled) {
+          await ensureCustomerCards();
+          const selectedCard = this.customerCardsCache?.cards?.find(
+            (item) => item.fields.skyflow_id === card,
+          );
+          if (!selectedCard) {
+            throw new Error("Card not found for card-on-file processing");
+          }
+          const hasSubscriptionId = !!selectedCard.fields.subscription_id;
+
+          if (!hasSubscriptionId) {
+            await this.collectCardTokens(card);
+          }
+
+          if (hasSubscriptionId) {
+            subscriptionCard = { subscriptionId: selectedCard.fields.subscription_id! };
+          }
+        } else {
+          await this.collectCardTokens(card);
+        }
       } else {
+        const sanitizedCard = {
+          ...card!,
+          card_number: card!.card_number.replace(/\s+/g, ""),
+          expiration_month: card!.expiration_month.replace(/\s+/g, ""),
+          expiration_year: card!.expiration_year.replace(/\s+/g, ""),
+          cvv: card!.cvv.replace(/\s+/g, ""),
+          cardholder_name: card!.cardholder_name.replace(/\s+/g, ""),
+        };
         skyflowTokens = await getSkyflowTokens({
           vault_id: vault_id,
           vault_url: vault_url,
-          data: { ...card, card_number: card!.card_number.replace(/\s+/g, "") },
+          data: sanitizedCard,
           baseUrl: this.baseUrl,
           apiKey: this.apiKeyTonder,
         });
+        skyflowId = skyflowTokens.skyflow_id;
+
+        if (cardOnFileEnabled) {
+          cardTokensForCardOnFile = {
+            name: skyflowTokens.cardholder_name,
+            number: skyflowTokens.card_number,
+            expiryMonth: skyflowTokens.expiration_month,
+            expiryYear: skyflowTokens.expiration_year,
+            cvv: skyflowTokens.cvv,
+          };
+          shouldProcessCardOnFile = true;
+        }
+      }
+
+      if (shouldProcessCardOnFile) {
+        if (!skyflowId || !cardTokensForCardOnFile) {
+          throw new Error("Missing card data for card-on-file processing");
+        }
+
+        const saveResponse = await this._saveCustomerCard(
+          auth_token,
+          business?.pk,
+          { skyflow_id: skyflowId },
+          true,
+        );
+        const cardBin = saveResponse.card_bin;
+        if (!cardBin) {
+          throw new Error("Card BIN not returned from save card");
+        }
+
+        const cardOnFile = await this._initializeCardOnFile();
+        const result = await cardOnFile.process({
+          cardTokens: cardTokensForCardOnFile,
+          cardBin,
+          contactDetails: {
+            firstName: first_name || "",
+            lastName: last_name || "",
+            email: email || "",
+          },
+          customerId: auth_token,
+          currency: this.currency || "MXN",
+        });
+        subscriptionCard = { subscriptionId: result.subscriptionId };
+
+        await this._saveCustomerCard(
+          auth_token,
+          business?.pk,
+          {
+            skyflow_id: skyflowId,
+            subscription_id: subscriptionCard.subscriptionId,
+          },
+        );
       }
     }
 
@@ -388,7 +527,8 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       payment_method,
       customer,
       isSandbox,
-      returnUrl: returnUrlData
+      returnUrl: returnUrlData,
+      enable_card_on_file: !!subscriptionCard?.subscriptionId,
     });
   }
 

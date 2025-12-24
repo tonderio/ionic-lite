@@ -3,7 +3,7 @@ import {
   buildErrorResponseFromCatch,
 } from "../helpers/utils";
 import { MESSAGES } from "../shared/constants/messages";
-import {ICustomerCardsResponse, ISaveCardResponse, ISaveCardSkyflowRequest} from "../types/card";
+import {ICustomerCardsResponse, ISaveCardInternalResponse, ISaveCardSkyflowRequest} from "../types/card";
 
 export async function fetchCustomerCards(
   baseUrl: string,
@@ -43,7 +43,8 @@ export async function saveCustomerCard(
   secureToken: string,
   businessId: string | number,
   data: ISaveCardSkyflowRequest,
-): Promise<ISaveCardResponse> {
+  appOrigin: boolean = false,
+): Promise<ISaveCardInternalResponse> {
   try {
     const url = `${baseUrl}/api/v1/business/${businessId}/cards/`;
     const response = await fetch(url, {
@@ -52,6 +53,7 @@ export async function saveCustomerCard(
         Authorization: `Bearer ${secureToken}`,
         "Content-Type": "application/json",
         'User-token': customerToken,
+        ...(appOrigin ? { 'X-App-Origin': 'sdk/ionic' } : {}),
       },
       body: JSON.stringify(data),
     });
