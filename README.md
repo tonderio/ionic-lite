@@ -8,14 +8,15 @@ Tonder SDK helps to integrate the services Tonder offers in your own mobile app
 1. [Installation](#installation)
 2. [Usage](#usage)
 3. [Configuration Options](#configuration-options)
-4. [Mobile Settings](#mobile-settings)
-5. [Payment Data Structure](#payment-data-structure)
-6. [Field Validation Functions](#field-validation-functions)
-7. [API Reference](#api-reference)
-8. [Examples](#examples)
-9. [Deprecated Fields](#deprecated-fields)
-10. [Deprecated Functions](#deprecated-functions)
-11. [License](#license)
+4. [Card On File](#card-on-file)
+5. [Mobile Settings](#mobile-settings)
+6. [Payment Data Structure](#payment-data-structure)
+7. [Field Validation Functions](#field-validation-functions)
+8. [API Reference](#api-reference)
+9. [Examples](#examples)
+10. [Deprecated Fields](#deprecated-fields)
+11. [Deprecated Functions](#deprecated-functions)
+12. [License](#license)
 
 
 ## Installation
@@ -96,6 +97,32 @@ const paymentResponse = await liteCheckout.payment(paymentData);
 |  apiKey   |  string  |                            Your API key from the Tonder Dashboard                            |
 | returnrl |  string  |                    URL where the checkout form is mounted (used for 3DS)                     |
 | callBack  | function |         Callback function to be invoked after the payment process ends successfully.         |
+
+## Card On File
+
+Card On File is applied automatically when enabled for your merchant account. No extra SDK configuration is required. For saved-card UIs, you must handle CVV collection based on the card data returned by `getCustomerCards()`:
+
+- If a saved card has `subscription_id`, CVV is not required.
+- If a saved card does not have `subscription_id`, you must collect CVV and pass the card id to `payment()`, or the SDK will error.
+- Only call `mountCardFields()` when the selected card does not have `subscription_id`.
+
+Example (conditional CVV mount):
+```ts
+const selectedCard = cardsResponse.cards.find(
+  (card) => card.fields.skyflow_id === selectedCardId
+);
+const needsCvv = !selectedCard?.fields?.subscription_id;
+
+if (needsCvv) {
+  liteCheckout.mountCardFields({ fields: ['cvv'], card_id: selectedCardId });
+}
+```
+
+### Existing saved cards without subscription_id
+Cards saved before Card On File was enabled may not have `subscription_id`. You have three options:
+1) Remove the card using `removeCustomerCard()` and let the user add it again.
+2) Run a payment flow that shows the full card form; the SDK will create a subscription and update the card. Note: this can generate a new `skyflow_id`, so update any references in your app.
+3) Ask Tonder support to remove a specific card or all saved cards for a user.
 
 ## Mobile settings
 
