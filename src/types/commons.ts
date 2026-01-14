@@ -8,6 +8,10 @@ import ComposableElement from "skyflow-js/types/core/external/collect/compose-co
 import RevealElement from "skyflow-js/types/core/external/reveal/reveal-element";
 import {LabelStyles} from "skyflow-js/types/utils/common";
 
+export type CardOnFileKeys = {
+    merchant_id: string;
+    public_key: string;
+}
 
 export type Business = {
   business: {
@@ -41,6 +45,7 @@ export type Business = {
   vault_url: string;
   reference: number;
   is_installments_available: boolean;
+  cardonfile_keys?: CardOnFileKeys;
 };
 
 export type Customer = {

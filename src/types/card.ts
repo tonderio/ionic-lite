@@ -10,6 +10,7 @@ export interface ICardSkyflowFields {
     skyflow_id: string;
     card_scheme: string;
     cardholder_name: string;
+    subscription_id?: string;
 }
 
 export interface ICustomerCardsResponse {
@@ -22,8 +23,15 @@ export interface ISaveCardResponse {
     user_id: number;
 }
 
+export interface ISaveCardInternalResponse {
+    skyflow_id: string;
+    user_id: number;
+    card_bin?: string;
+}
+
 export interface ISaveCardSkyflowRequest {
     skyflow_id: string;
+    subscription_id?: string;
 }
 
 export interface ISaveCardRequest {
