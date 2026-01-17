@@ -89,6 +89,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
           ...response,
           cards: response.cards.map((ic) => ({
               ...ic,
+              subscription_id: this._hasCardOnFileKeys() ? ic.fields.subscription_id : undefined,
               icon: getCardType(ic.fields.card_scheme),
           })),
       };
@@ -528,7 +529,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       customer,
       isSandbox,
       returnUrl: returnUrlData,
-      enable_card_on_file: !!subscriptionCard?.subscriptionId,
+      enable_card_on_file: !!subscriptionCard?.subscriptionId && cardOnFileEnabled,
     });
   }
 
