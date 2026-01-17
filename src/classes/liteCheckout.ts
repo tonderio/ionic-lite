@@ -89,7 +89,10 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
           ...response,
           cards: response.cards.map((ic) => ({
               ...ic,
-              subscription_id: this._hasCardOnFileKeys() ? ic.fields.subscription_id : undefined,
+              fields:{
+                  ...ic.fields,
+                  subscription_id: this._hasCardOnFileKeys() ? ic.fields.subscription_id : undefined,
+              },
               icon: getCardType(ic.fields.card_scheme),
           })),
       };
