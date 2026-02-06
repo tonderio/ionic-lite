@@ -109,6 +109,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   public async saveCustomerCard(
     card: ISaveCardRequest,
   ): Promise<ISaveCardResponse> {
+    let cardId: string | null = null;
     try {
       await this._fetchMerchantData();
       const customerResponse = await this._getCustomer() as CustomerRegisterResponse;
@@ -138,6 +139,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         skyflowTokens,
         cardOnFileEnabled,
       );
+      cardId = saveResponse.skyflow_id;
 
       if (cardOnFileEnabled) {
         const cardBin = saveResponse.card_bin;
@@ -177,6 +179,9 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
 
       return saveResponse;
     } catch (error) {
+      if(cardId){
+          await this.removeCustomerCard(cardId);
+      }
       throw formatPublicErrorResponse(
         {
           message: MESSAGES.saveCardError,
@@ -489,40 +494,48 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         if (!skyflowId || !cardTokensForCardOnFile) {
           throw new Error("Missing card data for card-on-file processing");
         }
+        let cardId: string | null = null;
+        try {
+            const saveResponse = await this._saveCustomerCard(
+                auth_token,
+                business?.pk,
+                { skyflow_id: skyflowId },
+                true,
+            );
+            cardId = saveResponse.skyflow_id;
+            const cardBin = saveResponse.card_bin;
+            if (!cardBin) {
+                throw new Error("Card BIN not returned from save card");
+            }
 
-        const saveResponse = await this._saveCustomerCard(
-          auth_token,
-          business?.pk,
-          { skyflow_id: skyflowId },
-          true,
-        );
-        const cardBin = saveResponse.card_bin;
-        if (!cardBin) {
-          throw new Error("Card BIN not returned from save card");
+            const cardOnFile = await this._initializeCardOnFile();
+            const result = await cardOnFile.process({
+                cardTokens: cardTokensForCardOnFile,
+                cardBin,
+                contactDetails: {
+                    firstName: first_name || "",
+                    lastName: last_name || "",
+                    email: email || "",
+                },
+                customerId: auth_token,
+                currency: this.currency || "MXN",
+            });
+            subscriptionCard = { subscriptionId: result.subscriptionId };
+
+            await this._saveCustomerCard(
+                auth_token,
+                business?.pk,
+                {
+                    skyflow_id: skyflowId,
+                    subscription_id: subscriptionCard.subscriptionId,
+                },
+            );
+        }catch (error) {
+            if(cardId){
+                await this.removeCustomerCard(cardId)
+            }
+            throw new Error("Error processing card-on-file subscription");
         }
-
-        const cardOnFile = await this._initializeCardOnFile();
-        const result = await cardOnFile.process({
-          cardTokens: cardTokensForCardOnFile,
-          cardBin,
-          contactDetails: {
-            firstName: first_name || "",
-            lastName: last_name || "",
-            email: email || "",
-          },
-          customerId: auth_token,
-          currency: this.currency || "MXN",
-        });
-        subscriptionCard = { subscriptionId: result.subscriptionId };
-
-        await this._saveCustomerCard(
-          auth_token,
-          business?.pk,
-          {
-            skyflow_id: skyflowId,
-            subscription_id: subscriptionCard.subscriptionId,
-          },
-        );
       }
     }
 
