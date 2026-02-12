@@ -23,6 +23,8 @@ export interface IStartCheckoutRequestBase {
     browser_info?: any;
     metadata: any;
     currency: string;
+    apm_config?: IMPConfigRequest | Record<string, any>;
+    items?: IItem[],
 }
 
 export type IStartCheckoutRequestWithCard = IStartCheckoutRequestBase & {

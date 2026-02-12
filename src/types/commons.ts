@@ -126,6 +126,10 @@ export interface IInlineCheckoutBaseOptions<T extends CustomizationOptions = Cus
   customization?: T;
   tdsIframeId?: string,
   tonderPayButtonId?: string
+  sdkInfo?: {
+    name: string;
+    version: string;
+  }
 }
 
 export interface IInlineLiteCheckoutOptions
@@ -165,9 +169,10 @@ export interface IApiError {
 
 export interface IPublicError {
   status: string;
-  code: number;
+  code: string;
   message: string;
-  detail: Record<string, any> | string;
+  statusCode: number;
+  details: Record<string, any>;
 }
 
 export type CustomizationOptions = {

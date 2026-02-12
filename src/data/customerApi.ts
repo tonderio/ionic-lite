@@ -1,4 +1,8 @@
 import {CustomerRegisterResponse} from "../types/responses";
+import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
+import {
+  buildPublicAppError,
+} from "../shared/utils/appError";
 
 export async function registerOrFetchCustomer(
   baseUrl: string,
@@ -23,9 +27,12 @@ export async function registerOrFetchCustomer(
     body: JSON.stringify(data),
   });
 
-  if (response.status === 201) {
+  if (response.ok) {
     return await response.json();
-  } else {
-    throw new Error(`Error: ${response.statusText}`);
   }
+
+  throw await buildPublicAppError({
+    response,
+    errorCode: ErrorKeyEnum.CUSTOMER_OPERATION_ERROR,
+  });
 }

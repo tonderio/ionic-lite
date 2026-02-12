@@ -64,6 +64,8 @@ export const MESSAGES_EN: Record<string, string> = {
         'There was an issue loading the card form.',
     [ErrorKeyEnum.MOUNT_COLLECT_ERROR]:
         'Mount failed. Make sure all inputs are complete and valid.',
+    [ErrorKeyEnum.CARD_ON_FILE_DECLINED]:
+        'Transaction declined. Please verify your card details.',
     [ErrorKeyEnum.REQUEST_ABORTED]: 'Requests canceled.',
     [ErrorKeyEnum.REQUEST_FAILED]: 'Request failed.',
     [ErrorKeyEnum.UNKNOWN_ERROR]: 'An unexpected error occurred.',
@@ -123,6 +125,8 @@ export const MESSAGES_ES = {
         'Hubo un problema cargando el formulario de tarjeta.',
     [ErrorKeyEnum.MOUNT_COLLECT_ERROR]:
         'Falló el montaje. Asegúrate de que todos los campos estén completos y sean válidos.',
+    [ErrorKeyEnum.CARD_ON_FILE_DECLINED]:
+        'Transaccion declinada. Verique los datos de su tarjeta.',
     [ErrorKeyEnum.CARD_SAVED_SUCCESSFULLY]: 'Tarjeta registrada con éxito.',
     [ErrorKeyEnum.CARD_REMOVED_SUCCESSFULLY]: 'Tarjeta eliminada con éxito.',
     [ErrorKeyEnum.REQUEST_ABORTED]: 'Peticiones canceladas.',

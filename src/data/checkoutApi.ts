@@ -1,5 +1,9 @@
 import {CreateOrderRequest, CreatePaymentRequest} from "../types/requests";
 import {IStartCheckoutIdRequest, IStartCheckoutRequest} from "../types/checkout";
+import {
+  buildPublicAppError,
+} from "../shared/utils/appError";
+import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
 
 declare const MP_DEVICE_SESSION_ID: string | undefined;
 
@@ -19,10 +23,13 @@ export async function createOrder(
     },
     body: JSON.stringify(data),
   });
-  if (response.status === 201) {
+  if (response.ok) {
     return await response.json();
   } else {
-    throw new Error(`Error: ${response.statusText}`);
+    throw await buildPublicAppError({
+      response,
+      errorCode: ErrorKeyEnum.CREATE_ORDER_ERROR,
+    });
   }
 }
 
@@ -41,10 +48,13 @@ export async function createPayment(
     },
     body: JSON.stringify(data),
   });
-  if (response.status >= 200 && response.status <= 299) {
+  if (response.ok) {
     return await response.json();
   } else {
-    throw new Error(`Error: ${response.statusText}`);
+    throw await buildPublicAppError({
+      response,
+      errorCode: ErrorKeyEnum.CREATE_PAYMENT_ERROR,
+    });
   }
 }
 
@@ -53,32 +63,27 @@ export async function startCheckoutRouter(
   apiKey: string,
   routerItems: IStartCheckoutRequest | IStartCheckoutIdRequest,
 ) {
-  try {
-    const url = `${baseUrl}/api/v1/checkout-router/`;
-    const data = routerItems;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${apiKey}`,
-      },
-      body: JSON.stringify({
-        ...data,
-        ...(typeof MP_DEVICE_SESSION_ID !== "undefined"
-          ? { mp_device_session_id: MP_DEVICE_SESSION_ID }
-          : {}),
-      }),
-    });
-    if (response.status >= 200 && response.status <= 299) {
-      return await response.json();
-    } else {
-      const errorResponse = await response.json();
-      const error = new Error("Failed to start checkout router");
-      // @ts-ignore
-      error.details = errorResponse;
-      throw error;
-    }
-  } catch (error) {
-    throw error;
+  const url = `${baseUrl}/api/v1/checkout-router/`;
+  const data = routerItems;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Token ${apiKey}`,
+    },
+    body: JSON.stringify({
+      ...data,
+      ...(typeof MP_DEVICE_SESSION_ID !== "undefined"
+        ? { mp_device_session_id: MP_DEVICE_SESSION_ID }
+        : {}),
+    }),
+  });
+  if (response.ok) {
+    return await response.json();
   }
+
+  throw await buildPublicAppError({
+    response,
+    errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
+  });
 }
