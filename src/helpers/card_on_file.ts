@@ -9,6 +9,11 @@ import type {
   SecurityInfo,
   Validate3DSResponse,
 } from "../types/cardOnFile";
+import { getApiBaseUrl, API_ENDPOINTS } from "../shared/constants/apiEndpoints";
+import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
+import {
+  buildPublicAppError,
+} from "../shared/utils/appError";
 
 declare global {
   interface Window {
@@ -20,6 +25,7 @@ declare global {
 // ============ Helper Functions ============
 
 const ACQUIRER_SCRIPT_URL = "https://cdn.kushkipagos.com/kushki.min.js";
+const CARD_ON_FILE_ERROR_CODE = ErrorKeyEnum.CARD_ON_FILE_DECLINED;
 
 let acquirerScriptLoaded = false;
 let acquirerScriptPromise: Promise<void> | null = null;
@@ -53,7 +59,16 @@ async function loadAcquirerScript(): Promise<void> {
 
     script.onerror = () => {
       acquirerScriptPromise = null;
-      reject(new Error("Failed to load acquirer script"));
+      reject(
+        buildPublicAppError({
+          errorCode: CARD_ON_FILE_ERROR_CODE,
+          lockErrorCode: true,
+          details: {
+            step: "load_acquirer_script",
+            message: "Failed to load acquirer script",
+          },
+        }),
+      );
     };
 
     document.head.appendChild(script);
@@ -67,7 +82,14 @@ function createAcquirerInstance(
   isTestEnvironment: boolean
 ): AcquirerInstance {
   if (!window.Kushki) {
-    throw new Error("Acquirer script not loaded. Call initialize() first.");
+    throw buildPublicAppError({
+      errorCode: CARD_ON_FILE_ERROR_CODE,
+      lockErrorCode: true,
+      details: {
+        step: "create_acquirer_instance",
+        message: "Acquirer script not loaded. Call initialize() first.",
+      },
+    });
   }
 
   return new window.Kushki({
@@ -75,11 +97,6 @@ function createAcquirerInstance(
     inTestEnvironment: isTestEnvironment,
   });
 }
-
-// ============ Constants ============
-
-const ACQ_API_URL_STAGE = "https://api-stage.tonder.io";
-const ACQ_API_URL_PROD = "https://api.tonder.io";
 
 // ============ CardOnFile Class ============
 
@@ -96,7 +113,9 @@ export class CardOnFile {
     isTestEnvironment?: boolean;
   }) {
     this.isTestEnvironment = config.isTestEnvironment ?? true;
-    this.apiUrl = this.isTestEnvironment ? ACQ_API_URL_STAGE : ACQ_API_URL_PROD;
+    // Use centralized API endpoint constants
+    const mode = this.isTestEnvironment ? "stage" : "production";
+    this.apiUrl = getApiBaseUrl(mode);
     this.merchantId = config.merchantId;
     this.apiKey = config.apiKey;
   }
@@ -111,7 +130,14 @@ export class CardOnFile {
 
   private getAcquirerInstance(): AcquirerInstance {
     if (!this.acquirerInstance) {
-      throw new Error("CardOnFile not initialized. Call initialize() first.");
+      throw buildPublicAppError({
+        errorCode: CARD_ON_FILE_ERROR_CODE,
+        lockErrorCode: true,
+        details: {
+          step: "get_acquirer_instance",
+          message: "CardOnFile not initialized. Call initialize() first.",
+        },
+      });
     }
     return this.acquirerInstance;
   }
@@ -132,13 +158,32 @@ export class CardOnFile {
         },
         (response) => {
           if ("code" in response && response.code) {
-            reject(new Error(`Error getting JWT: ${response.message}`));
+            reject(
+              buildPublicAppError({
+                errorCode: CARD_ON_FILE_ERROR_CODE,
+                lockErrorCode: true,
+                details: {
+                  step: "get_jwt",
+                  acquirerResponse: response as unknown as Record<string, unknown>,
+                },
+              }),
+            );
             return;
           }
 
           const successResponse = response as SecureInitResponse;
           if (!successResponse.jwt) {
-            reject(new Error("No JWT returned from acquirer"));
+            reject(
+              buildPublicAppError({
+                errorCode: CARD_ON_FILE_ERROR_CODE,
+                lockErrorCode: true,
+                details: {
+                  step: "get_jwt",
+                  message: "No JWT returned from acquirer",
+                  acquirerResponse: successResponse as unknown as Record<string, unknown>,
+                },
+              }),
+            );
             return;
           }
 
@@ -153,7 +198,7 @@ export class CardOnFile {
    */
   async generateToken(request: CardOnFileTokenRequest): Promise<CardOnFileTokenResponse> {
     const response = await fetch(
-      `${this.apiUrl}/acq-kushki/subscription/token`,
+      `${this.apiUrl}${API_ENDPOINTS.ACQ_SUBSCRIPTION_TOKEN}`,
       {
         method: "POST",
         headers: {
@@ -165,8 +210,14 @@ export class CardOnFile {
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to generate token: ${response.status} - ${errorText}`);
+      throw await buildPublicAppError({
+        response,
+        errorCode: CARD_ON_FILE_ERROR_CODE,
+        lockErrorCode: true,
+        details: {
+          step: "generate_token",
+        },
+      });
     }
 
     return response.json() as Promise<CardOnFileTokenResponse>;
@@ -177,7 +228,7 @@ export class CardOnFile {
    */
   async createSubscription(request: CardOnFileSubscriptionRequest): Promise<CardOnFileSubscriptionResponse> {
     const response = await fetch(
-      `${this.apiUrl}/acq-kushki/subscription/create`,
+      `${this.apiUrl}${API_ENDPOINTS.ACQ_SUBSCRIPTION_CREATE}`,
       {
         method: "POST",
         headers: {
@@ -189,8 +240,14 @@ export class CardOnFile {
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to create subscription: ${response.status} - ${errorText}`);
+      throw await buildPublicAppError({
+        response,
+        errorCode: CARD_ON_FILE_ERROR_CODE,
+        lockErrorCode: true,
+        details: {
+          step: "create_subscription",
+        },
+      });
     }
 
     return response.json() as Promise<CardOnFileSubscriptionResponse>;
@@ -216,13 +273,33 @@ export class CardOnFile {
           const validResponse = response as Validate3DSResponse;
           // Check for error code
           if (validResponse.code && validResponse.code !== "3DS000") {
-            reject(new Error(`3DS validation failed}`));
+            reject(
+              buildPublicAppError({
+                errorCode: CARD_ON_FILE_ERROR_CODE,
+                lockErrorCode: true,
+                details: {
+                  step: "validate_3ds",
+                  message: "3DS validation failed",
+                  acquirerResponse: validResponse as unknown as Record<string, unknown>,
+                },
+              }),
+            );
             return;
           }
 
           // Check isValid flag if present
           if (validResponse.isValid === false) {
-            reject(new Error("3DS validation failed"));
+            reject(
+              buildPublicAppError({
+                errorCode: CARD_ON_FILE_ERROR_CODE,
+                lockErrorCode: true,
+                details: {
+                  step: "validate_3ds",
+                  message: "3DS validation failed",
+                  acquirerResponse: validResponse as unknown as Record<string, unknown>,
+                },
+              }),
+            );
             return;
           }
 
@@ -248,7 +325,15 @@ export class CardOnFile {
 
     // Validate 3DS is required
     if (!secureId || !security) {
-      throw new Error("Missing secureId or security in token response");
+      throw buildPublicAppError({
+        errorCode: CARD_ON_FILE_ERROR_CODE,
+        lockErrorCode: true,
+        details: {
+          step: "process",
+          message: "Missing secureId or security in token response",
+          tokenResponse: tokenResponse as unknown as Record<string, unknown>,
+        },
+      });
     }
 
     // Validate 3DS - throws error if validation fails

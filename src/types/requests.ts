@@ -11,6 +11,9 @@ export interface CreateOrderRequest {
     reference: string | number,
     is_oneclick: boolean,
     items: IItem[]
+    currency?: string,
+    customer_order_reference?: string,
+    metadata?: Record<string, any>,
 }
 
 export type CreatePaymentRequest = {
@@ -19,6 +22,10 @@ export type CreatePaymentRequest = {
     date?: string,
     order_id?: string | number
     client_id?: string | number
+    customer_order_reference?: string | number,
+    metadata?: Record<string, any>,
+    items?: IItem[],
+    currency?: string,
 }
 
 export type StartCheckoutRequestBase = {

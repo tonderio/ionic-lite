@@ -1,3 +1,8 @@
+import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
+import {
+  buildPublicAppError,
+} from "../shared/utils/appError";
+
 export async function getVaultToken(
   baseUrl: string,
   apiKey: string,
@@ -14,7 +19,10 @@ export async function getVaultToken(
   if (response.ok) {
     const responseBody = await response.json();
     return responseBody.token;
-  } else {
-    throw new Error("Failed to retrieve bearer token");
   }
+
+  throw await buildPublicAppError({
+    response,
+    errorCode: ErrorKeyEnum.VAULT_TOKEN_ERROR,
+  });
 }

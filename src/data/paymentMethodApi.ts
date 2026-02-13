@@ -1,7 +1,7 @@
 import {
-  buildErrorResponse,
-  buildErrorResponseFromCatch,
-} from "../helpers/utils";
+  buildPublicAppError,
+} from "../shared/utils/appError";
+import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
 import {IPaymentMethodResponse} from "../types/paymentMethod";
 
 export async function fetchCustomerPaymentMethods(
@@ -13,24 +13,23 @@ export async function fetchCustomerPaymentMethods(
   },
   signal = null,
 ): Promise<IPaymentMethodResponse> {
-  try {
-    const queryString = new URLSearchParams(params).toString();
+  const queryString = new URLSearchParams(params).toString();
 
-    const response = await fetch(
-      `${baseUrl}/api/v1/payment_methods?${queryString}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Token ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        signal,
+  const response = await fetch(
+    `${baseUrl}/api/v1/payment_methods?${queryString}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Token ${apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      signal,
+    },
+  );
 
-    if (response.ok) return await response.json();
-    throw await buildErrorResponse(response);
-  } catch (error) {
-    throw buildErrorResponseFromCatch(error);
-  }
+  if (response.ok) return await response.json();
+  throw await buildPublicAppError({
+    response,
+    errorCode: ErrorKeyEnum.FETCH_PAYMENT_METHODS_ERROR,
+  });
 }

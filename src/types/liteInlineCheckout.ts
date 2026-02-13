@@ -53,7 +53,6 @@ export interface ILiteCheckout {
    *
    * @throws {Error} Throws an error if the checkout process fails. The error object contains
    * additional `details` property with the response from the server if available.
-   * @property {import("./index").IStartCheckoutErrorResponse} error.details - The response body from the server when an error occurs.
    *
    * @public
    */

@@ -3,16 +3,12 @@ import {ErrorResponse} from "./errorResponse";
 import TonderError from "../shared/utils/errors";
 import {ErrorKeyEnum} from "../shared/enum/ErrorKeyEnum";
 import {
-    buildErrorResponse,
-    buildErrorResponseFromCatch,
-    formatPublicErrorResponse,
     getBrowserInfo,
     getBusinessId,
     getCardType,
 } from "../helpers/utils";
 import {getCustomerAPMs} from "../data/api";
 import {BaseInlineCheckout} from "./BaseInlineCheckout";
-import {MESSAGES} from "../shared/constants/messages";
 import {getSkyflowTokens, initSkyflowInstance, mountSkyflowFields} from "../helpers/skyflow";
 import {startCheckoutRouter} from "../data/checkoutApi";
 import {getOpenpayDeviceSessionID} from "../data/openPayApi";
@@ -31,7 +27,6 @@ import {
     CreatePaymentResponse,
     CustomerRegisterResponse,
     GetBusinessResponse,
-    IErrorResponse,
     RegisterCustomerCardResponse,
     StartCheckoutResponse
 } from "../types/responses";
@@ -48,6 +43,8 @@ import {ICardFields, IStartCheckoutResponse} from "../types/checkout";
 import {ILiteCheckout} from "../types/liteInlineCheckout";
 import CollectorContainer from "skyflow-js/types/core/external/collect/collect-container";
 import Skyflow from "skyflow-js";
+import { buildPublicAppError } from "../shared/utils/appError";
+import { SDK_INFO } from "../helpers/sdkInfo";
 
 declare const MP_DEVICE_SESSION_ID: string | undefined;
 
@@ -66,7 +63,17 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   private customerCardsCache: ICustomerCardsResponse | null = null;
 
   constructor({ apiKey, mode, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, collectorIds, events }: IInlineLiteCheckoutOptions) {
-    super({ mode, apiKey, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, tdsIframeId: collectorIds && 'tdsIframe' in collectorIds ? collectorIds?.tdsIframe : "tdsIframe"});
+    super({
+      mode,
+      apiKey,
+      returnUrl,
+      callBack,
+      apiKeyTonder,
+      baseUrlTonder,
+      customization,
+      tdsIframeId: collectorIds && 'tdsIframe' in collectorIds ? collectorIds?.tdsIframe : "tdsIframe",
+      sdkInfo: SDK_INFO,
+    });
     this.skyflowInstance = null;
     this.events = events || {}
   }
@@ -97,9 +104,16 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
           })),
       };
     } catch (error) {
-      throw formatPublicErrorResponse(
+      this.reportSdkError(error, {
+        feature: "get-cards",
+        process_id: this.getCustomerId(),
+        metadata: {
+          step: "getCustomerCards"
+        },
+      });
+      throw buildPublicAppError(
         {
-          message: MESSAGES.getCardsError,
+          errorCode: ErrorKeyEnum.FETCH_CARDS_ERROR,
         },
         error,
       );
@@ -148,23 +162,34 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         }
 
         const cardOnFile = await this._initializeCardOnFile();
-        const result = await cardOnFile.process({
-          cardTokens: {
-              name: skyflowTokens.cardholder_name,
-              number: skyflowTokens.card_number,
-              expiryMonth: skyflowTokens.expiration_month,
-              expiryYear: skyflowTokens.expiration_year,
-              cvv: skyflowTokens.cvv,
-          },
-          cardBin,
-          contactDetails: {
-            firstName: first_name || "",
-            lastName: last_name || "",
-            email: email || "",
-          },
-          customerId: auth_token,
-          currency: this.currency || "MXN",
-        });
+        let result;
+        try {
+          result = await cardOnFile.process({
+            cardTokens: {
+                name: skyflowTokens.cardholder_name,
+                number: skyflowTokens.card_number,
+                expiryMonth: skyflowTokens.expiration_month,
+                expiryYear: skyflowTokens.expiration_year,
+                cvv: skyflowTokens.cvv,
+            },
+            cardBin,
+            contactDetails: {
+              firstName: first_name || "",
+              lastName: last_name || "",
+              email: email || "",
+            },
+            customerId: auth_token,
+            currency: this.currency || "MXN",
+          });
+        } catch (processError) {
+          throw buildPublicAppError(
+            {
+              errorCode: ErrorKeyEnum.CARD_ON_FILE_DECLINED,
+              lockErrorCode: true,
+            },
+            processError,
+          );
+        }
 
         const updatePayload: ISaveCardSkyflowRequest  = {
           skyflow_id: skyflowTokens.skyflow_id,
@@ -182,9 +207,16 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       if(cardId){
           await this.removeCustomerCard(cardId);
       }
-      throw formatPublicErrorResponse(
+      this.reportSdkError(error, {
+        feature: "save-card",
+        process_id: cardId || this.getCustomerId(),
+        metadata: {
+          step: "saveCustomerCard",
+        },
+      });
+      throw buildPublicAppError(
         {
-          message: MESSAGES.saveCardError,
+          errorCode: ErrorKeyEnum.SAVE_CARD_ERROR,
         },
         error,
       );
@@ -203,9 +235,16 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         skyflowId,
       );
     } catch (error) {
-      throw formatPublicErrorResponse(
+      this.reportSdkError(error, {
+        feature: "remove-card",
+        process_id: skyflowId,
+        metadata: {
+          step: "removeCustomerCard"
+        },
+      });
+      throw buildPublicAppError(
         {
-          message: MESSAGES.removeCardError,
+          errorCode: ErrorKeyEnum.REMOVE_CARD_ERROR,
         },
         error,
       );
@@ -235,9 +274,15 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         })
         .sort((a, b) => a.priority - b.priority);
     } catch (error) {
-      throw formatPublicErrorResponse(
+      this.reportSdkError(error, {
+        feature: "get-payment-methods",
+        metadata: {
+          step: "getCustomerPaymentMethods",
+        },
+      });
+      throw buildPublicAppError(
         {
-          message: MESSAGES.getPaymentMethodsError,
+          errorCode: ErrorKeyEnum.FETCH_PAYMENT_METHODS_ERROR,
         },
         error,
       );
@@ -292,6 +337,13 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       return collectResponse?.records?.[0]?.fields || null;
     } catch (e: any) {
       const errorDescription = e?.error?.description;
+      this.reportSdkError(e, {
+        feature: "collect-card-tokens",
+        process_id: cardId,
+        metadata: {
+          step: "collectCardTokens",
+        },
+      });
       throw new TonderError({
         code: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
         details: {
@@ -330,6 +382,13 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
           }
         } catch (error) {
           console.warn(`Error unmounting Skyflow element from context '${context}':`, error);
+          this.reportSdkError(error, {
+            feature: "unmount-card-fields",
+            metadata: {
+              step: "unmountContext",
+              context,
+            },
+          });
         }
       });
     }
@@ -343,9 +402,15 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         this.abortController.signal,
       );
     } catch (e) {
-      throw formatPublicErrorResponse(
+      this.reportSdkError(e, {
+        feature: "get-business",
+        metadata: {
+          step: "getBusiness",
+        },
+      });
+      throw buildPublicAppError(
         {
-          message: MESSAGES.getBusinessError,
+          errorCode: ErrorKeyEnum.FETCH_BUSINESS_ERROR,
         },
         e,
       );
@@ -378,7 +443,18 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         is_sandbox,
       );
     } catch (e) {
-      throw buildErrorResponseFromCatch(e);
+      this.reportSdkError(e, {
+        feature: "get-openpay-device-session",
+        metadata: {
+          step: "getOpenpayDeviceSessionID",
+        },
+      });
+      throw buildPublicAppError(
+        {
+          errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
+        },
+        e,
+      );
     }
   }
 
@@ -509,17 +585,28 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
             }
 
             const cardOnFile = await this._initializeCardOnFile();
-            const result = await cardOnFile.process({
-                cardTokens: cardTokensForCardOnFile,
-                cardBin,
-                contactDetails: {
-                    firstName: first_name || "",
-                    lastName: last_name || "",
-                    email: email || "",
-                },
-                customerId: auth_token,
-                currency: this.currency || "MXN",
-            });
+            let result;
+            try {
+                result = await cardOnFile.process({
+                    cardTokens: cardTokensForCardOnFile,
+                    cardBin,
+                    contactDetails: {
+                        firstName: first_name || "",
+                        lastName: last_name || "",
+                        email: email || "",
+                    },
+                    customerId: auth_token,
+                    currency: this.currency || "MXN",
+                });
+            } catch (processError) {
+                throw buildPublicAppError(
+                    {
+                        errorCode: ErrorKeyEnum.CARD_ON_FILE_DECLINED,
+                        lockErrorCode: true,
+                    },
+                    processError,
+                );
+            }
             subscriptionCard = { subscriptionId: result.subscriptionId };
 
             await this._saveCustomerCard(
@@ -534,7 +621,14 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
             if(cardId){
                 await this.removeCustomerCard(cardId)
             }
-            throw new Error("Error processing card-on-file subscription");
+            this.reportSdkError(error, {
+              feature: "payment",
+              process_id: cardId || this.getCustomerId(),
+              metadata: {
+                step: "card_on_file",
+              },
+            });
+            throw error;
         }
       }
     }
@@ -568,9 +662,23 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
 
       if (response.ok)
         return (await response.json()) as CustomerRegisterResponse;
-      throw await buildErrorResponse(response);
+      throw await buildPublicAppError({
+        response,
+        errorCode: ErrorKeyEnum.CUSTOMER_OPERATION_ERROR,
+      });
     } catch (e) {
-      throw buildErrorResponseFromCatch(e);
+      this.reportSdkError(e, {
+        feature: "customer-register",
+        metadata: {
+          step: "customerRegister",
+        },
+      });
+      throw buildPublicAppError(
+        {
+          errorCode: ErrorKeyEnum.CUSTOMER_OPERATION_ERROR,
+        },
+        e,
+      );
     }
   }
 
@@ -590,9 +698,23 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         body: JSON.stringify(data),
       });
       if (response.ok) return (await response.json()) as CreateOrderResponse;
-      throw await buildErrorResponse(response);
+      throw await buildPublicAppError({
+        response,
+        errorCode: ErrorKeyEnum.CREATE_ORDER_ERROR,
+      });
     } catch (e) {
-      throw buildErrorResponseFromCatch(e);
+      this.reportSdkError(e, {
+        feature: "create-order",
+        metadata: {
+          step: "createOrder",
+        },
+      });
+      throw buildPublicAppError(
+        {
+          errorCode: ErrorKeyEnum.CREATE_ORDER_ERROR,
+        },
+        e,
+      );
     }
   }
 
@@ -612,9 +734,23 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         body: JSON.stringify(data),
       });
       if (response.ok) return (await response.json()) as CreatePaymentResponse;
-      throw await buildErrorResponse(response);
+      throw await buildPublicAppError({
+        response,
+        errorCode: ErrorKeyEnum.CREATE_PAYMENT_ERROR,
+      });
     } catch (e) {
-      throw buildErrorResponseFromCatch(e);
+      this.reportSdkError(e, {
+        feature: "create-payment",
+        metadata: {
+          step: "createPayment",
+        },
+      });
+      throw buildPublicAppError(
+        {
+          errorCode: ErrorKeyEnum.CREATE_PAYMENT_ERROR,
+        },
+        e,
+      );
     }
   }
 
@@ -749,23 +885,37 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
           const payload = await this.init3DSRedirect(checkoutResult);
           if (payload) return checkoutResult;
         } else {
-          throw new ErrorResponse({
-            code: "500",
-            body: orderResult as any,
-            name: "Keys error",
-            message: "Order response errors",
-          } as IErrorResponse);
+          throw buildPublicAppError({
+            errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
+            details: {
+              message: "Order response errors",
+              orderResult: orderResult as any,
+            },
+          });
         }
       } else {
-        throw new ErrorResponse({
-          code: "500",
-          body: merchantResult as any,
-          name: "Keys error",
-          message: "Merchant or customer reposne errors",
-        } as IErrorResponse);
+        throw buildPublicAppError({
+          errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
+          details: {
+            message: "Merchant or customer reposne errors",
+            merchantResult: merchantResult as any,
+            customerResult: customerResult as any,
+          },
+        });
       }
     } catch (e) {
-      throw buildErrorResponseFromCatch(e);
+      this.reportSdkError(e, {
+        feature: "start-checkout-router-full",
+        metadata: {
+          step: "startCheckoutRouterFull",
+        },
+      });
+      throw buildPublicAppError(
+        {
+          errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
+        },
+        e,
+      );
     }
   }
 
@@ -793,9 +943,23 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
 
       if (response.ok)
         return (await response.json()) as RegisterCustomerCardResponse;
-      throw await buildErrorResponse(response);
+      throw await buildPublicAppError({
+        response,
+        errorCode: ErrorKeyEnum.SAVE_CARD_ERROR,
+      });
     } catch (error) {
-      throw buildErrorResponseFromCatch(error);
+      this.reportSdkError(error, {
+        feature: "register-customer-card",
+        metadata: {
+          step: "registerCustomerCard",
+        },
+      });
+      throw buildPublicAppError(
+        {
+          errorCode: ErrorKeyEnum.SAVE_CARD_ERROR,
+        },
+        error,
+      );
     }
   }
 
@@ -819,9 +983,24 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       );
 
       if (response.ok) return true;
-      throw await buildErrorResponse(response);
+      throw await buildPublicAppError({
+        response,
+        errorCode: ErrorKeyEnum.REMOVE_CARD_ERROR,
+      });
     } catch (error) {
-      throw buildErrorResponseFromCatch(error);
+      this.reportSdkError(error, {
+        feature: "delete-customer-card",
+        process_id: skyflowId,
+        metadata: {
+          step: "deleteCustomerCard",
+        },
+      });
+      throw buildPublicAppError(
+        {
+          errorCode: ErrorKeyEnum.REMOVE_CARD_ERROR,
+        },
+        error,
+      );
     }
   }
 
