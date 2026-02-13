@@ -13,10 +13,11 @@ Tonder SDK helps to integrate the services Tonder offers in your own mobile app
 6. [Payment Data Structure](#payment-data-structure)
 7. [Field Validation Functions](#field-validation-functions)
 8. [API Reference](#api-reference)
-9. [Examples](#examples)
-10. [Deprecated Fields](#deprecated-fields)
-11. [Deprecated Functions](#deprecated-functions)
-12. [License](#license)
+9. [Error Handling](#error-handling)
+10. [Examples](#examples)
+11. [Deprecated Fields](#deprecated-fields)
+12. [Deprecated Functions](#deprecated-functions)
+13. [License](#license)
 
 
 ## Installation
@@ -356,6 +357,42 @@ liteCheckout.mountCardFields({ fields: ["cvv"], card_id: "saved-card-id" });
 
 
 ```
+
+## Error Handling
+
+Public SDK methods that fail due to API/SDK execution return an `AppError` (with `name: "TonderError"`).
+
+### Error structure
+
+```json
+{
+  "status": "error",
+  "name": "TonderError",
+  "code": "PAYMENT_PROCESS_ERROR",
+  "message": "There was an issue processing the payment.",
+  "statusCode": 500,
+  "details": {
+    "code": "PAYMENT_PROCESS_ERROR",
+    "statusCode": 500,
+    "systemError": "APP_INTERNAL_001"
+  }
+}
+```
+
+Notes:
+- `statusCode` comes from HTTP response when available; otherwise defaults to `500`.
+- `details.systemError` comes from backend error code when available; otherwise defaults to `APP_INTERNAL_001`.
+- In card-on-file flow failures, the SDK returns `CARD_ON_FILE_DECLINED`.
+
+### Public method error mapping
+
+| Method | Returned `error.code` |
+|---|---|
+| `payment(data)` | `PAYMENT_PROCESS_ERROR` or `CARD_ON_FILE_DECLINED` |
+| `getCustomerCards()` | `FETCH_CARDS_ERROR` |
+| `saveCustomerCard(cardData)` | `SAVE_CARD_ERROR` or `CARD_ON_FILE_DECLINED` |
+| `removeCustomerCard(cardId)` | `REMOVE_CARD_ERROR` |
+| `getCustomerPaymentMethods()` | `FETCH_PAYMENT_METHODS_ERROR` |
 
 
 ## Examples
@@ -719,15 +756,6 @@ const ExploreContainer = () => {
 };
 ```
 
-## Request secure token
-
-```typescript
-
-const jsonResponse = await liteCheckout.getSecureToken(
-  secretApiKey //You can take this from you Tonder Dashboard 
-);
-
-```
 
 ## Return secure token
 

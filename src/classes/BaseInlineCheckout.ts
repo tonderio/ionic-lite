@@ -9,7 +9,6 @@ import {
 } from "../data/checkoutApi";
 import { getOpenpayDeviceSessionID } from "../data/openPayApi";
 import {
-  formatPublicErrorResponse,
   getBrowserInfo
 } from "../helpers/utils";
 import { registerOrFetchCustomer } from "../data/customerApi";
@@ -33,9 +32,13 @@ import {IPaymentMethodResponse} from "../types/paymentMethod";
 import {ITransaction} from "../types/transaction";
 import {GetSecureTokenResponse} from "../types/responses";
 import {getSecureToken} from "../data/tokenApi";
-import {MESSAGES} from "../shared/constants/messages";
+import {ErrorKeyEnum} from "../shared/enum/ErrorKeyEnum";
 import { IMPConfigRequest } from "../types/mercadoPago";
 import { CardOnFile } from "../helpers/card_on_file";
+import { SdkTelemetryClient } from "../helpers/SdkTelemetryClient";
+import { getTelemetryEndpoint } from "../shared/constants/apiEndpoints";
+import { SDK_INFO } from "../helpers/sdkInfo";
+import { AppError, buildPublicAppError } from "../shared/utils/appError";
 export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOptions> {
   baseUrl = "";
   cartTotal: string | number = "0";
@@ -60,6 +63,8 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   card? = {};
   currency?: string = "";
   protected cardOnFileInstance: CardOnFile | null = null;
+  protected telemetry: SdkTelemetryClient;
+  protected readonly requestId: string;
   #apm_config?:IMPConfigRequest | Record<string, any>
   #customerData?: Record<string, any>;
 
@@ -72,7 +77,8 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     tdsIframeId,
     callBack = () => {},
     baseUrlTonder,
-    tonderPayButtonId
+    tonderPayButtonId,
+    sdkInfo,
   }: IInlineCheckoutBaseOptions) {
     this.apiKeyTonder = apiKeyTonder || apiKey || "";
     this.returnUrl = returnUrl;
@@ -81,6 +87,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     this.customer = {} as ICustomer
     this.baseUrl = baseUrlTonder || TONDER_URL_BY_MODE[this.mode] || TONDER_URL_BY_MODE["stage"];
     this.abortController = new AbortController();
+    this.requestId = this.generateRequestId();
     this.customization = {
       ...this.customization,
       ...(customization || {}),
@@ -95,11 +102,65 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
       callBack: callBack
     });
     this.tdsIframeId = tdsIframeId;
+
+    const resolvedSdkInfo = sdkInfo || SDK_INFO;
+
+    // Initialize telemetry
+    this.telemetry = new SdkTelemetryClient({
+      endpoint: getTelemetryEndpoint(this.mode),
+      apiKey: this.apiKeyTonder,
+      platform: resolvedSdkInfo.name,
+      platform_version: resolvedSdkInfo.version,
+      mode: this.mode || "stage",
+    });
   }
 
   configureCheckout(data: IConfigureCheckout) {
     if ("secureToken" in data) this.#setSecureToken(data["secureToken"]);
     this.#setCheckoutData(data)
+  }
+
+  /**
+   * Get customer ID for telemetry (if available)
+   */
+  protected getCustomerId(): string | undefined {
+    return this.#customerData?.id?.toString();
+  }
+
+  /**
+   * Report SDK errors to telemetry endpoint
+   * NEVER throws - completely silent on failure
+   */
+  protected reportSdkError(err: unknown, extra?: Record<string, any>): void {
+    try {
+      const defaultUserId = this.getCustomerId();
+      const telemetryError =
+        err instanceof AppError && err.originalError !== undefined
+          ? err.originalError
+          : err;
+      const metadata = {
+        ...(extra?.metadata || {}),
+        ...(extra?.metadata?.error === undefined ? { error: telemetryError } : {}),
+      };
+      const context: Record<string, any> = {
+        tenant_id: this.merchantData?.business?.pk?.toString(),
+        user_id: defaultUserId,
+        ...(extra || {}),
+        metadata,
+        request_id: this.requestId,
+      };
+
+      if (!context.user_id) delete context.user_id;
+      context.feature = extra?.feature || "unknown";
+
+      this.telemetry.captureException(err, context);
+    } catch (e) {
+      // Silent - never throw
+    }
+  }
+
+  private generateRequestId(): string {
+    return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
 
   async verify3dsTransaction(): Promise<ITransaction | IStartCheckoutResponse | void> {
@@ -111,9 +172,10 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
 
   payment(data: IProcessPaymentRequest): Promise<IStartCheckoutResponse> {
     return new Promise(async (resolve, reject) => {
+      let response;
       try {
         this.#setCheckoutData(data)
-        const response = await this._checkout(data);
+        response = await this._checkout(data);
         this.process3ds.setPayload(response);
         const payload = await this._handle3dsRedirect(response);
         if (payload) {
@@ -127,7 +189,23 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
           resolve(response);
         }
       } catch (error) {
-        reject(error);
+        this.reportSdkError(error, {
+          feature: "payment",
+          process_id: response?.payment_id  || response?.payment?.id || response?.payment?.pk,
+          metadata: {
+            step: "payment",
+            request: data,
+            response
+          },
+        });
+        reject(
+          buildPublicAppError(
+            {
+              errorCode: ErrorKeyEnum.PAYMENT_PROCESS_ERROR,
+            },
+            error,
+          ),
+        );
       }
     });
   }
@@ -136,11 +214,17 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     try {
       return await getSecureToken(this.baseUrl, secretApikey)
     } catch (error) {
-      throw formatPublicErrorResponse(
-          {
-            message: MESSAGES.secureTokenError,
-          },
-          error,
+      this.reportSdkError(error, {
+        feature: "secure-token",
+        metadata: {
+          step: "getSecureToken",
+        },
+      });
+      throw buildPublicAppError(
+        {
+          errorCode: ErrorKeyEnum.SECURE_TOKEN_ERROR,
+        },
+        error,
       );
     }
   }
@@ -203,6 +287,9 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }) {
     const { openpay_keys, reference, business } = this.merchantData!;
     const total = Number(this.cartTotal);
+    let orderItems;
+    let paymentItems;
+    let routerItems
     try {
       let deviceSessionIdTonder;
       if (
@@ -221,7 +308,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
 
       const { id, auth_token } = customer;
 
-      const orderItems = {
+      orderItems = {
         business: this.apiKeyTonder,
         client: auth_token,
         billing_address_id: null,
@@ -244,7 +331,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
       const now = new Date();
       const dateString = now.toISOString();
 
-      const paymentItems = {
+      paymentItems = {
         business_pk: business.pk,
         client_id: id,
         amount: total,
@@ -262,7 +349,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
       );
 
       // Checkout router
-      const routerItems = {
+      routerItems = {
         name: get(this.customer, "firstName", get(this.customer, "name", "")),
         last_name: get(
           this.customer,
@@ -307,7 +394,16 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         return false;
       }
     } catch (error) {
-      console.log(error);
+      this.reportSdkError(error, {
+        feature: "payment",
+        process_id: routerItems?.payment_id,
+        metadata: {
+          step: "_handleCheckout",
+          orderItems,
+          paymentItems,
+          routerItems
+        },
+      });
       throw error;
     }
   }
@@ -334,6 +430,12 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
       }
       return this.merchantData;
     } catch (e) {
+      this.reportSdkError(e, {
+        feature: "fetch-merchant-data",
+        metadata: {
+          step: "_fetchMerchantData",
+        },
+      });
       return this.merchantData;
     }
   }
@@ -445,6 +547,13 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         })
         .catch((error) => {
           console.log("Error loading iframe:", error);
+          this.reportSdkError(error, {
+            feature: "3ds-verification",
+            metadata: {
+              step: "_handle3dsRedirect",
+              response,
+            },
+          });
         });
     } else {
       const redirectUrl = this.process3ds.getRedirectUrl();
@@ -481,6 +590,14 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
           routerItems,
         );
       } catch (error) {
+        this.reportSdkError(error, {
+          feature: "payment",
+          process_id: response?.payment_id  || response?.payment?.id || response?.payment?.pk,
+          metadata: {
+            step: "#resumeCheckout",
+            response
+          },
+        });
         // throw error
       }
       return response;

@@ -1,7 +1,5 @@
-import { ErrorResponse } from "../classes/errorResponse";
 import Skyflow from "skyflow-js";
 import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
-import { buildErrorResponseFromCatch } from "./utils";
 import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
 import { getVaultToken } from "../data/skyflowApi";
 import { TokensSkyflowRequest } from "../types/requests";
@@ -24,6 +22,8 @@ import {
   DEFAULT_SKYFLOW_lABEL_STYLES,
 } from "../shared/styles/skyflow.styles";
 import { get } from "lodash";
+import { buildPublicAppError } from "../shared/utils/appError";
+import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
 
 /**
  * [DEPRECATION WARNING]
@@ -36,7 +36,7 @@ export async function getSkyflowTokens({
   vault_id,
   vault_url,
   data,
-}: TokensSkyflowRequest): Promise<any | ErrorResponse> {
+}: TokensSkyflowRequest): Promise<any> {
   const skyflow = Skyflow.init({
     vaultID: vault_id,
     vaultURL: vault_url,
@@ -58,20 +58,31 @@ export async function getSkyflowTokens({
   const mountFail = result.some((item: boolean) => !item);
 
   if (mountFail) {
-    throw buildErrorResponseFromCatch(
-      Error("Ocurrió un error al montar los campos de la tarjeta"),
-    );
+    throw buildPublicAppError({
+      errorCode: ErrorKeyEnum.SAVE_CARD_PROCESS_ERROR,
+      details: {
+        step: "get_skyflow_tokens",
+      },
+    });
   } else {
     try {
       const collectResponseSkyflowTonder =
         (await collectContainer.collect()) as any;
       if (collectResponseSkyflowTonder)
         return collectResponseSkyflowTonder["records"][0]["fields"];
-      throw buildErrorResponseFromCatch(
-        Error("Por favor, verifica todos los campos de tu tarjeta"),
-      );
+      throw buildPublicAppError({
+        errorCode: ErrorKeyEnum.SAVE_CARD_PROCESS_ERROR,
+        details: {
+          step: "get_skyflow_tokens"
+        },
+      });
     } catch (error) {
-      throw buildErrorResponseFromCatch(error);
+      throw buildPublicAppError(
+        {
+          errorCode: ErrorKeyEnum.SAVE_CARD_PROCESS_ERROR,
+        },
+        error,
+      );
     }
   }
 }
