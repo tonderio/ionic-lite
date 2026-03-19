@@ -4,6 +4,14 @@ import { SdkTelemetryClient } from './helpers/SdkTelemetryClient'
 import { AppError } from './shared/utils/appError'
 import { validateCVV, validateCardNumber, validateExpirationMonth, validateCardholderName, validateExpirationYear } from './helpers/validations'
 
+export type {
+    IRevealCardFieldsRequest,
+    IRevealCardField,
+    IRevealElementStyles,
+    IRevealElementInputStyles,
+    RevealableCardField,
+} from './types/card'
+
 export {
     LiteCheckout,
     BaseInlineCheckout,

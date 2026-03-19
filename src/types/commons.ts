@@ -158,6 +158,14 @@ export interface IEventSecureInput {
   isEmpty: boolean;
   isFocused: boolean;
   isValid: boolean;
+  /**
+   * The current value of the field as reported by Skyflow.
+   * Available in non-PROD Skyflow environments (DEV/SANDBOX).
+   * In PROD, sensitive fields (card_number, cvv) return an empty string;
+   * non-sensitive fields (cardholder_name, expiration_month, expiration_year)
+   * may still return their value.
+   */
+  value?: string;
 }
 export interface IEvents extends ICardFormEvents {}
 export interface IApiError {
@@ -209,6 +217,22 @@ export interface IFormPlaceholder {
 
 export interface IStyles {
   cardForm?: ILiteCardFormStyles;
+  /** Input-element styles applied only to the cardholder name field. Overrides `cardForm.inputStyles` for this field. */
+  cardholderName?: CollectInputStylesVariant;
+  /** Input-element styles applied only to the card number field. Overrides `cardForm.inputStyles` for this field. */
+  cardNumber?: CollectInputStylesVariant;
+  /** Input-element styles applied only to the CVV field. Overrides `cardForm.inputStyles` for this field. */
+  cvv?: CollectInputStylesVariant;
+  /** Input-element styles applied only to the expiration month field. Overrides `cardForm.inputStyles` for this field. */
+  expirationMonth?: CollectInputStylesVariant;
+  /** Input-element styles applied only to the expiration year field. Overrides `cardForm.inputStyles` for this field. */
+  expirationYear?: CollectInputStylesVariant;
+  /**
+   * Show the card-network icon inside the card number Skyflow Element.
+   * Corresponds to Skyflow's `CollectElementOptions.enableCardIcon`.
+   * @default true
+   */
+  enableCardIcon?: boolean;
 }
 
 export interface ILiteCardFormStyles extends StylesBaseVariant, IElementStyle {}
@@ -236,7 +260,7 @@ export interface CollectInputStylesVariant
   dropdownIcon?: Record<string, any>;
   dropdown?: Record<string, any>;
   dropdownListItem?: Record<string, any>;
-  global: Record<string, any>;
+  global?: Record<string, any>;
 }
 
 export interface CollectLabelStylesVariant

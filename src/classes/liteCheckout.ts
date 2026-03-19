@@ -9,7 +9,7 @@ import {
 } from "../helpers/utils";
 import {getCustomerAPMs} from "../data/api";
 import {BaseInlineCheckout} from "./BaseInlineCheckout";
-import {getSkyflowTokens, initSkyflowInstance, mountSkyflowFields} from "../helpers/skyflow";
+import {getSkyflowTokens, initSkyflowInstance, mountRevealFields, mountSkyflowFields} from "../helpers/skyflow";
 import {startCheckoutRouter} from "../data/checkoutApi";
 import {getOpenpayDeviceSessionID} from "../data/openPayApi";
 import {getPaymentMethodDetails} from "../shared/catalog/paymentMethodsCatalog";
@@ -17,7 +17,7 @@ import {APM, IEvents, IInlineLiteCheckoutOptions, InCollectorContainer, TonderAP
 import {
     ICustomerCardsResponse,
     IMountCardFieldsRequest,
-    ISaveCardRequest,
+    IRevealCardFieldsRequest,
     ISaveCardResponse,
     ISaveCardSkyflowRequest
 } from "../types/card";
@@ -39,7 +39,7 @@ import {
     StartCheckoutRequest,
     TokensRequest
 } from "../types/requests";
-import {ICardFields, IStartCheckoutResponse} from "../types/checkout";
+import {IStartCheckoutResponse} from "../types/checkout";
 import {ILiteCheckout} from "../types/liteInlineCheckout";
 import CollectorContainer from "skyflow-js/types/core/external/collect/collect-container";
 import Skyflow from "skyflow-js";
@@ -61,6 +61,8 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   // Store mounted elements by context: 'create' or 'update:card_id'
   private mountedElementsByContext: Map<string, { elements: any[], container: InCollectorContainer | null }> = new Map();
   private customerCardsCache: ICustomerCardsResponse | null = null;
+  // Tokens from the last collectCreateCardTokens() call — used by revealCardFields()
+  private lastCollectedTokens: Record<string, string> | null = null;
 
   constructor({ apiKey, mode, returnUrl, callBack, apiKeyTonder, baseUrlTonder, customization, collectorIds, events }: IInlineLiteCheckoutOptions) {
     super({
@@ -120,32 +122,16 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     }
   }
 
-  public async saveCustomerCard(
-    card: ISaveCardRequest,
-  ): Promise<ISaveCardResponse> {
+  public async saveCustomerCard(): Promise<ISaveCardResponse> {
     let cardId: string | null = null;
     try {
       await this._fetchMerchantData();
       const customerResponse = await this._getCustomer() as CustomerRegisterResponse;
       const { auth_token, first_name = "", last_name = "", email = "" } = customerResponse;
-      const { vault_id, vault_url, business } = this.merchantData!;
+      const { business } = this.merchantData!;
       const cardOnFileEnabled = this._hasCardOnFileKeys();
 
-      const sanitizedCard = {
-        card_number: card.card_number.replace(/\s+/g, ""),
-        expiration_month: card.expiration_month.replace(/\s+/g, ""),
-        expiration_year: card.expiration_year.replace(/\s+/g, ""),
-        cvv: card.cvv.replace(/\s+/g, ""),
-        cardholder_name: card.cardholder_name.replace(/\s+/g, ""),
-      };
-
-      const skyflowTokens: any = await getSkyflowTokens({
-        vault_id: vault_id,
-        vault_url: vault_url,
-        data: sanitizedCard,
-        baseUrl: this.baseUrl,
-        apiKey: this.apiKeyTonder,
-      });
+      const skyflowTokens: any = await this.collectCreateCardTokens();
 
       const saveResponse = await this._saveCustomerCard(
         auth_token,
@@ -353,6 +339,81 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     }
   }
 
+  /**
+   * Collects card tokens from Skyflow Elements mounted for a new card (the 'create' context).
+   * Requires that `mountCardFields()` was called without a `card_id` beforehand.
+   */
+  private async collectCreateCardTokens(): Promise<Record<string, any>> {
+    const contextData = this.mountedElementsByContext.get('create');
+    const container = contextData?.container?.container as CollectorContainer | null;
+    if (!container) {
+      throw new TonderError({
+        code: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
+        details: {
+          message: 'No card fields are mounted. Call mountCardFields() with the required fields before proceeding.',
+        },
+      });
+    }
+    try {
+      const collectResponse: any = await container.collect();
+      const fields: Record<string, any> = collectResponse?.records?.[0]?.fields || {};
+      // Store tokens so revealCardFields() can use them after save/payment
+      this.lastCollectedTokens = fields;
+      return fields;
+    } catch (e: any) {
+      const errorDescription = e?.error?.description;
+      this.reportSdkError(e, {
+        feature: "collect-create-card-tokens",
+        metadata: {
+          step: "collectCreateCardTokens",
+        },
+      });
+      throw new TonderError({
+        code: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
+        details: {
+          message: errorDescription,
+        },
+      });
+    }
+  }
+
+  /**
+   * Reveals card data collected in the last `saveCustomerCard()` or `payment()` call
+   * (with a new card) in developer-provided `<div>` containers using Skyflow Reveal Elements.
+   *
+   * Must be called **after** a successful `saveCustomerCard()` or `payment()` that processed
+   * a new card (i.e., without a saved-card `skyflow_id`). Skyflow Reveal Elements render the
+   * actual (or masked) values inside secure iframes without exposing them to the application.
+   *
+   * Default container IDs: `#reveal_<field>` (e.g. `#reveal_card_number`).
+   * Default redaction: `MASKED` for card_number, `REDACTED` for cvv, `PLAIN_TEXT` for others.
+   *
+   * @param request - Fields to reveal and optional per-field styles/redaction/altText.
+   */
+  public async revealCardFields(request: IRevealCardFieldsRequest): Promise<void> {
+    if (!this.lastCollectedTokens) {
+      throw buildPublicAppError({
+        errorCode: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
+        details: {
+          message: 'No card tokens available. Call saveCustomerCard() or payment() with a new card before calling revealCardFields().',
+        },
+      });
+    }
+    if (!this.skyflowInstance) {
+      throw buildPublicAppError({
+        errorCode: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
+        details: {
+          message: 'Skyflow instance not initialized. Ensure mountCardFields() was called before saveCustomerCard() or payment().',
+        },
+      });
+    }
+    await mountRevealFields({
+      skyflowInstance: this.skyflowInstance,
+      tokens: this.lastCollectedTokens,
+      request,
+    });
+  }
+
   public unmountCardFields(context: string = 'all'): void {
     if (context === 'all') {
       this.mountedElementsByContext.forEach((contextData, ctx) => {
@@ -427,6 +488,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       vault_url: vault_url,
       baseUrl: this.baseUrl,
       apiKey: this.apiKeyTonder,
+      mode: this.mode,
     })
   }
 
@@ -484,14 +546,14 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     // TODO: DEPRECATED
     returnUrl: returnUrlData
   }: {
-    card?: ICardFields | string;
+    card?: string;
     payment_method?: string;
     isSandbox?: boolean;
     returnUrl?: string;
   }) {
     await this._fetchMerchantData();
     const customer = await this._getCustomer(this.abortController.signal) as CustomerRegisterResponse;
-    const { vault_id, vault_url, business } = this.merchantData!;
+    const { business } = this.merchantData!;
     const { auth_token, first_name = "", last_name = "", email = "" } = customer;
     const cardOnFileEnabled = this._hasCardOnFileKeys();
     let skyflowTokens;
@@ -537,21 +599,8 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
           await this.collectCardTokens(card);
         }
       } else {
-        const sanitizedCard = {
-          ...card!,
-          card_number: card!.card_number.replace(/\s+/g, ""),
-          expiration_month: card!.expiration_month.replace(/\s+/g, ""),
-          expiration_year: card!.expiration_year.replace(/\s+/g, ""),
-          cvv: card!.cvv.replace(/\s+/g, ""),
-          cardholder_name: card!.cardholder_name.replace(/\s+/g, ""),
-        };
-        skyflowTokens = await getSkyflowTokens({
-          vault_id: vault_id,
-          vault_url: vault_url,
-          data: sanitizedCard,
-          baseUrl: this.baseUrl,
-          apiKey: this.apiKeyTonder,
-        });
+        // New card: collect tokens from mounted Skyflow Elements (mountCardFields must be called first)
+        skyflowTokens = await this.collectCreateCardTokens();
         skyflowId = skyflowTokens.skyflow_id;
 
         if (cardOnFileEnabled) {

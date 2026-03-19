@@ -109,7 +109,12 @@ export interface IProcessPaymentRequest {
     metadata?: Record<string, any>;
     currency?: string;
     payment_method?: string;
-    card?: ICardFields | string;
+    /**
+     * For a saved card: pass the `skyflow_id` string of the saved card.
+     * For a new card: omit this field — card data is collected from Skyflow Elements
+     * mounted via `mountCardFields()`.
+     */
+    card?: string;
     isSandbox?: boolean;
     apm_config?: IMPConfigRequest | Record<string, any>;
     /**
@@ -120,6 +125,10 @@ export interface IProcessPaymentRequest {
     order_reference?: string | null;
 }
 
+/**
+ * @deprecated Raw card fields are no longer accepted by `payment()` or `saveCustomerCard()`.
+ * Use `mountCardFields()` to render Skyflow Elements and collect card data securely.
+ */
 export interface ICardFields {
     card_number: string;
     cvv: string;
