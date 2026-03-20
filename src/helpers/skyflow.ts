@@ -188,9 +188,9 @@ export async function mountSkyflowFields(event: {
   };
 
   const getFieldStyles = (field: CardFieldEnum) => {
-    const perFieldInputStyles = customization?.styles?.[fieldToStyleKey[field]];
+    const perField = customization?.styles?.[fieldToStyleKey[field]];
     const form = customization?.styles?.cardForm;
-    const resolvedInputStyles = perFieldInputStyles ?? form?.inputStyles ?? DEFAULT_SKYFLOW_INPUT_STYLES;
+    const resolvedInputStyles = perField?.inputStyles ?? form?.inputStyles ?? DEFAULT_SKYFLOW_INPUT_STYLES;
 
     // For card_number: inject paddingLeft default so text doesn't overlap the card-network icon.
     // Applied only when the icon is visible (enableCardIcon !== false) and the developer
@@ -208,8 +208,8 @@ export async function mountSkyflowFields(event: {
 
     return {
       inputStyles,
-      labelStyles: form?.labelStyles ?? DEFAULT_SKYFLOW_lABEL_STYLES,
-      errorStyles: form?.errorStyles ?? DEFAULT_SKYFLOW_ERROR_TEXT_STYLES,
+      labelStyles: perField?.labelStyles ?? form?.labelStyles ?? DEFAULT_SKYFLOW_lABEL_STYLES,
+      errorStyles: perField?.errorStyles ?? form?.errorStyles ?? DEFAULT_SKYFLOW_ERROR_TEXT_STYLES,
     };
   };
 

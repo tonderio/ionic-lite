@@ -256,7 +256,7 @@ interface IEventSecureInput {
 }
 ```
 
-> **PCI note:** `value` is only populated in `development` mode. In `production`, `value` is always `''` for sensitive fields (`card_number`, `cvv`); non-sensitive fields (`cardholder_name`, `expiration_month`, `expiration_year`) may still return their value. Use `isValid` and `isEmpty` for UI state logic — never depend on `value` in production.
+> **PCI note:** In `production`, all fields return `value: ''` except `card_number`, which returns a masked value (first digits only). In `stage`, `development`, and `sandbox`, `value` is fully populated for all fields. Use `isValid` and `isEmpty` for UI state logic — never depend on `value` in production.
 
 **Example — live card form validation:**
 
@@ -1148,26 +1148,7 @@ new LiteCheckout({
 
 ### 11.2 Per-field styles
 
-Override styles for individual fields using the field keys in `IStyles`. These take priority over `cardForm` styles.
-
-> **Key difference from `cardForm`:** Per-field keys are directly `CollectInputStylesVariant` — variants like `base`, `focus`, `invalid` go at the top level. There is **no** `inputStyles` wrapper.
-
-**Available style variants for `CollectInputStylesVariant`:**
-
-```typescript
-interface CollectInputStylesVariant {
-  base?: Record<string, any>;           // Default state
-  focus?: Record<string, any>;          // When field has focus
-  complete?: Record<string, any>;       // When field has a valid value
-  invalid?: Record<string, any>;        // When value fails validation
-  empty?: Record<string, any>;          // When field is empty (unfocused)
-  cardIcon?: Record<string, any>;       // Card brand icon (card_number only)
-  dropdownIcon?: Record<string, any>;   // Dropdown arrow icon
-  dropdown?: Record<string, any>;       // Dropdown container
-  dropdownListItem?: Record<string, any>; // Each dropdown option
-  global?: Record<string, any>;         // Applied to the iframe root element
-}
-```
+Override styles for individual fields using the field keys in `IStyles`. These take priority over `cardForm` styles and use the **same structure as `cardForm`** (`inputStyles`, `labelStyles`, `errorStyles`), so you can override the label and error text per field as well.
 
 **Per-field keys in `IStyles`:**
 
@@ -1179,35 +1160,49 @@ interface CollectInputStylesVariant {
 | `expirationMonth` | Expiration month field |
 | `expirationYear` | Expiration year field |
 
-**Example — highlight CVV with a different color scheme:**
+**Example — highlight CVV with a different color scheme and custom label:**
 
 ```typescript
 customization: {
   styles: {
     cvv: {
-      base: { borderColor: '#8e44ad', backgroundColor: '#faf5ff' },
-      focus: { borderColor: '#6c3483', boxShadow: '0 0 0 3px rgba(108,52,131,0.2)' },
-      invalid: { borderColor: '#e74c3c', color: '#e74c3c' },
-      complete: { borderColor: '#27ae60' },
+      inputStyles: {
+        base:     { borderColor: '#8e44ad', backgroundColor: '#faf5ff' },
+        focus:    { borderColor: '#6c3483', boxShadow: '0 0 0 3px rgba(108,52,131,0.2)' },
+        invalid:  { borderColor: '#e74c3c', color: '#e74c3c' },
+        complete: { borderColor: '#27ae60' },
+      },
+      labelStyles: {
+        base: { color: '#8e44ad', fontWeight: '600' },
+      },
+      errorStyles: {
+        base: { color: '#e74c3c', fontSize: '11px' },
+      },
     },
   },
 }
 ```
 
-**Example — full per-field override:**
+**Example — card number with custom input and icon styles:**
 
 ```typescript
 customization: {
   styles: {
     cardNumber: {
-      base: { letterSpacing: '2px', fontFamily: '"Courier New", monospace' },
-      cardIcon: { width: '32px', height: '20px' },
+      inputStyles: {
+        base:    { letterSpacing: '2px', fontFamily: '"Courier New", monospace' },
+        cardIcon: { width: '32px', height: '20px' },
+      },
     },
     expirationMonth: {
-      base: { textAlign: 'center' },
+      inputStyles: {
+        base: { textAlign: 'center' },
+      },
     },
     expirationYear: {
-      base: { textAlign: 'center' },
+      inputStyles: {
+        base: { textAlign: 'center' },
+      },
     },
   },
 }
