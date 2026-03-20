@@ -305,6 +305,18 @@ export async function mountSkyflowFields(event: {
           },
           key === CardFieldEnum.CARD_NUMBER ? cardIconOption : undefined,
         );
+        handleSkyflowElementEvents({
+          element,
+          errorStyles: getFieldStyles(key).errorStyles,
+          fieldMessage: [
+            CardFieldEnum.CVV,
+            CardFieldEnum.EXPIRATION_MONTH,
+            CardFieldEnum.EXPIRATION_YEAR,
+          ].includes(key)
+            ? ""
+            : labels[key],
+          events: eventsByField[key],
+        });
         const containerId =
           fieldObj.container_id ||
           `#collect_${String(key)}` + (data.card_id ? `_${data.card_id}` : "");
