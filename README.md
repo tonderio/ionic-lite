@@ -1,840 +1,1320 @@
-# Tonder SDK
+# @tonder.io/ionic-lite-sdk
 
-Tonder SDK helps to integrate the services Tonder offers in your own mobile app
-
+PCI DSS–compliant payment SDK for Ionic, Angular, and React.
+Card data is collected through **Skyflow secure iframes** — raw card values never touch your application code.
 
 ## Table of Contents
 
-1. [Installation](#installation)
-2. [Usage](#usage)
-3. [Configuration Options](#configuration-options)
-4. [Card On File](#card-on-file)
-5. [Mobile Settings](#mobile-settings)
-6. [Payment Data Structure](#payment-data-structure)
-7. [Field Validation Functions](#field-validation-functions)
-8. [API Reference](#api-reference)
-9. [Error Handling](#error-handling)
-10. [Examples](#examples)
-11. [Deprecated Fields](#deprecated-fields)
-12. [Deprecated Functions](#deprecated-functions)
-13. [License](#license)
+1. [Quick Start](#1-quick-start)
+2. [Installation](#2-installation)
+3. [Constructor & Configuration](#3-constructor--configuration)
+   - [3.1 Options reference](#31-options-reference)
+   - [3.2 Customization options](#32-customization-options)
+   - [3.3 Form events](#33-form-events)
+4. [Initialization Sequence](#4-initialization-sequence)
+5. [Collecting Card Data — `mountCardFields`](#5-collecting-card-data--mountcardfields)
+   - [5.1 New-card form (all 5 fields)](#51-new-card-form-all-5-fields)
+   - [5.2 Saved-card CVV only](#52-saved-card-cvv-only)
+   - [5.3 Unmounting fields](#53-unmounting-fields)
+6. [Processing Payments](#6-processing-payments)
+   - [6.1 New card payment](#61-new-card-payment)
+   - [6.2 Saved card payment](#62-saved-card-payment)
+   - [6.3 Alternative Payment Method (APM)](#63-alternative-payment-method-apm)
+   - [6.4 Payment response reference](#64-payment-response-reference)
+7. [3DS Handling](#7-3ds-handling)
+8. [Managing Saved Cards](#8-managing-saved-cards)
+   - [8.1 List saved cards](#81-list-saved-cards)
+   - [8.2 Save a new card](#82-save-a-new-card)
+   - [8.3 Remove a card](#83-remove-a-card)
+   - [8.4 Card On File (subscription_id)](#84-card-on-file-subscription_id)
+9. [Revealing Card Data — `revealCardFields`](#9-revealing-card-data--revealcardfields)
+10. [Error Handling](#10-error-handling)
+    - [10.1 Error structure](#101-error-structure)
+    - [10.2 Error code reference](#102-error-code-reference)
+11. [Customization & Styling](#11-customization--styling)
+    - [11.1 Global form styles](#111-global-form-styles)
+    - [11.2 Per-field styles](#112-per-field-styles)
+    - [11.3 Labels & placeholders](#113-labels--placeholders)
+12. [Deprecated API](#12-deprecated-api)
 
+---
 
-## Installation
+## 1. Quick Start
 
-You can install using NPM
-```bash
-npm i @tonder.io/ionic-lite-sdk
-```
+Get a working payment form in under 5 minutes. This example uses the minimum required setup. See [Section 4](#4-initialization-sequence) for the full step-by-step explanation.
 
-Add dependencies to the root of the app (index.html) only if you are going to use Openpay as the payment processor.
+**Angular template:**
+
 ```html
-<script src=https://openpay.s3.amazonaws.com/openpay.v1.min.js></script>
-<script src=https://openpay.s3.amazonaws.com/openpay-data.v1.min.js></script>
+<!-- 3DS iframe — only add when using redirectOnComplete: false (see Section 7).
+     Remove this element if you are using the default redirectOnComplete: true. -->
+<iframe id="tdsIframe" allowtransparency="true" class="tds-iframe"></iframe>
+
+<!-- Secure iframes — card values never touch your code -->
+<div id="collect_cardholder_name"></div>
+<div id="collect_card_number"></div>
+<div id="collect_expiration_month"></div>
+<div id="collect_expiration_year"></div>
+<div id="collect_cvv"></div>
+
+<button (click)="pay()">Pay</button>
 ```
 
-## Usage
-LiteCheckout allows you to build a custom checkout interface using Tonder's core functionality
-### Import LiteCheckout class
-```javascript
-import { LiteCheckout } from "@tonder.io/ionic-lite-sdk"
-```
-### Create instance
-
-```javascript
-const liteCheckout = new LiteCheckout({ 
-  signal, 
-  baseUrlTonder, 
-  apiKeyTonder
-})
-
-// The configureCheckout function allows you to set initial information,
-// such as the customer's email, which is used to retrieve a list of saved cards, save new card, etc.
-inlineCheckout.configureCheckout({ customer: { email: "example@email.com" } });
-
-// Initialize the checkout
-await liteCheckout.injectCheckout();
-
-// To verify a 3ds transaction you can use the following method
-// It should be called after the injectCheckout method
-// The response status will be one of the following
-// ['Declined', 'Cancelled', 'Failed', 'Success', 'Pending', 'Authorized']
-
-inlineCheckout.verify3dsTransaction().then(response => {
-    console.log('Verify 3ds response', response)
-})
-```
-
-```javascript
-// Retrieve customer's saved cards
-const cards = await liteCheckout.getCustomerCards();
-```
-
-```javascript
-// Save a new card
-const newCard = await liteCheckout.saveCustomerCard(cardData);
-```
-
-```javascript
-// Remove a saved card
-await liteCheckout.removeCustomerCard(cardId);
-```
-
-```javascript
-// Get available payment methods
-const paymentMethods = await liteCheckout.getCustomerPaymentMethods();
-```
-
-```javascript
-// Process a payment
-const paymentResponse = await liteCheckout.payment(paymentData);
-```
-
-## Configuration Options
-
-| Property  |   Type   |                                         Description                                          |
-|:---------:|:--------:|:--------------------------------------------------------------------------------------------:|
-|   mode    |  string  | Environment mode. Options: 'stage', 'production', 'sandbox', 'development'. Default: 'stage' |
-|  apiKey   |  string  |                            Your API key from the Tonder Dashboard                            |
-| returnrl |  string  |                    URL where the checkout form is mounted (used for 3DS)                     |
-| callBack  | function |         Callback function to be invoked after the payment process ends successfully.         |
-
-## Card On File
-
-Card On File is applied automatically when enabled for your merchant account. No extra SDK configuration is required. For saved-card UIs, you must handle CVV collection based on the card data returned by `getCustomerCards()`:
-
-- If a saved card has `subscription_id`, CVV is not required.
-- If a saved card does not have `subscription_id`, you must collect CVV and pass the card id to `payment()`, or the SDK will error.
-- Only call `mountCardFields()` when the selected card does not have `subscription_id`.
-
-Example (conditional CVV mount):
-```ts
-const selectedCard = cardsResponse.cards.find(
-  (card) => card.fields.skyflow_id === selectedCardId
-);
-const needsCvv = !selectedCard?.fields?.subscription_id;
-
-if (needsCvv) {
-  liteCheckout.mountCardFields({ fields: ['cvv'], card_id: selectedCardId });
-}
-```
-
-### Existing saved cards without subscription_id
-Cards saved before Card On File was enabled may not have `subscription_id`. You have three options:
-1) Remove the card using `removeCustomerCard()` and let the user add it again.
-2) Run a payment flow that shows the full card form; the SDK will create a subscription and update the card. Note: this can generate a new `skyflow_id`, so update any references in your app.
-3) Ask Tonder support to remove a specific card or all saved cards for a user.
-
-## Mobile settings
-
-<font size="3">If you are deploying to Android, edit your AndroidManifest.xml file to add the Internet permission.</font>
-
-```xml
-<!-- Required to fetch data from the internet. -->
-<uses-permission android:name="android.permission.INTERNET" />
-```
-
-<font size="3">Likewise, if you are deploying to macOS, edit your macos/Runner/DebugProfile.entitlements and macos/Runner/Release.entitlements files to include the network client entitlement.</font>
-
-```xml
-<!-- Required to fetch data from the internet. -->
-<key>com.apple.security.network.client</key>
-<true>
-```
-
-## Payment Data Structure
-
-When calling the `payment` method, use the following data structure:
-
-### Field Descriptions
-
-- **customer**: Object containing the customer's personal information to be registered in the transaction.
-
-- **cart**: Object containing the total amount and an array of items to be registered in the Tonder order.
-
-    - **total**: The total amount of the transaction.
-    - **items**: An array of objects, each representing a product or service in the order.
-        - name: name of the product
-        - price_unit: valid float string with the price of the product
-        - quantity: valid integer string with the quantity of this product
-
-- **currency**: String representing the currency code for the transaction (e.g., "MXN" for Mexican Peso).
-
-- **metadata**: Object for including any additional information about the transaction. This can be used for internal references or tracking.
-
-- **card**: (for LiteCheckout) Object containing card information. This is used differently depending on whether it's a new card or a saved card:
-
-    - For a new card: Include `card_number`, `cvv`, `expiration_month`, `expiration_year`, and `cardholder_name`.
-    - For a saved card: Include only the `skyflow_id` of the saved card.
-    - This is only used when not paying with a payment_method.
-
-- **payment_method**: (for LiteCheckout) String indicating the alternative payment method to be used (e.g., "Spei"). This is only used when not paying with a card.
-- **order_reference**:  Unique order reference from the merchant. Used to visually identify/filter the order in dashboard.
-- **apm_config**: (Optional) Configuration object for APM-specific options. Only applicable when using alternative payment methods like Mercado Pago.
-<details>
-<summary>APM Config Fields - Mercado Pago</summary>
-
-| **Field**                           | **Type**                                   | **Description**                                                           |
-|-------------------------------------|--------------------------------------------|---------------------------------------------------------------------------|
-| `binary_mode`                       | `boolean`                                  | If `true`, payment must be approved or rejected immediately (no pending). |
-| `additional_info`                   | `string`                                   | Extra info shown during checkout and in payment details.                  |
-| `back_urls`                         | `object`                                   | URLs to redirect the user after payment.                                  |
-| └─ `success`                        | `string`                                   | Redirect URL after successful payment.                                    |
-| └─ `pending`                        | `string`                                   | Redirect URL after pending payment.                                       |
-| └─ `failure`                        | `string`                                   | Redirect URL after failed/canceled payment.                               |
-| `auto_return`                       | `"approved"` \| `"all"`                    | Enables auto redirection after payment completion.                        |
-| `payment_methods`                   | `object`                                   | Payment method restrictions and preferences.                              |
-| └─ `excluded_payment_methods[]`     | `array`                                    | List of payment methods to exclude.                                       |
-| └─ `excluded_payment_methods[].id`  | `string`                                   | ID of payment method to exclude (e.g., "visa").                           |
-| └─ `excluded_payment_types[]`       | `array`                                    | List of payment types to exclude.                                         |
-| └─ `excluded_payment_types[].id`    | `string`                                   | ID of payment type to exclude (e.g., "ticket").                           |
-| └─ `default_payment_method_id`      | `string`                                   | Default payment method (e.g., "master").                                  |
-| └─ `installments`                   | `number`                                   | Max number of installments allowed.                                       |
-| └─ `default_installments`           | `number`                                   | Default number of installments suggested.                                 |
-| `expires`                           | `boolean`                                  | Whether the preference has expiration.                                    |
-| `expiration_date_from`              | `string` (ISO 8601)                        | Start of validity period (e.g. `"2025-01-01T12:00:00-05:00"`).            |
-| `expiration_date_to`                | `string` (ISO 8601)                        | End of validity period.                                                   |
-| `differential_pricing`              | `object`                                   | Configuration for differential pricing.                                   |
-| └─ `id`                             | `number`                                   | ID of the differential pricing strategy.                                  |
-| `marketplace`                       | `string`                                   | Marketplace identifier (default: "NONE").                                 |
-| `marketplace_fee`                   | `number`                                   | Fee to collect as marketplace commission.                                 |
-| `tracks[]`                          | `array`                                    | Ad tracking configurations.                                               |
-| └─ `type`                           | `"google_ad"` \| `"facebook_ad"`           | Type of tracker.                                                          |
-| └─ `values.conversion_id`           | `string`                                   | Google Ads conversion ID.                                                 |
-| └─ `values.conversion_label`        | `string`                                   | Google Ads label.                                                         |
-| └─ `values.pixel_id`                | `string`                                   | Facebook Pixel ID.                                                        |
-| `statement_descriptor`              | `string`                                   | Text on payer’s card statement (max 16 characters).                       |
-| `shipments`                         | `object`                                   | Shipping configuration.                                                   |
-| └─ `mode`                           | `"custom"` \| `"me2"` \| `"not_specified"` | Type of shipping mode.                                                    |
-| └─ `local_pickup`                   | `boolean`                                  | Enable pickup at local branch (for `me2`).                                |
-| └─ `dimensions`                     | `string`                                   | Package dimensions (e.g. `10x10x10,500`).                                 |
-| └─ `default_shipping_method`        | `number`                                   | Default shipping method (for `me2`).                                      |
-| └─ `free_methods[]`                 | `array`                                    | Shipping methods offered for free (for `me2`).                            |
-| └─ `free_methods[].id`              | `number`                                   | ID of free shipping method.                                               |
-| └─ `cost`                           | `number`                                   | Shipping cost (only for `custom` mode).                                   |
-| └─ `free_shipping`                  | `boolean`                                  | If `true`, shipping is free (`custom` only).                              |
-| └─ `receiver_address`               | `object`                                   | Shipping address.                                                         |
-| └─ `receiver_address.zip_code`      | `string`                                   | ZIP or postal code.                                                       |
-| └─ `receiver_address.street_name`   | `string`                                   | Street name.                                                              |
-| └─ `receiver_address.street_number` | `number`                                   | Street number.                                                            |
-| └─ `receiver_address.city_name`     | `string`                                   | City name.                                                                |
-| └─ `receiver_address.state_name`    | `string`                                   | State name.                                                               |
-| └─ `receiver_address.country_name`  | `string`                                   | Country name.                                                             |
-| └─ `receiver_address.floor`         | `string`                                   | Floor (optional).                                                         |
-| └─ `receiver_address.apartment`     | `string`                                   | Apartment or unit (optional).                                             |
-</details>
-
-```javascript
-const paymentData = {
-  customer: {
-    firstName: "John",
-    lastName: "Doe",
-    country: "USA",
-    address: "123 Main St",
-    city: "Anytown",
-    state: "CA",
-    postCode: "12345",
-    email: "john.doe@example.com",
-    phone: "1234567890",
-    identification:{
-        type: "CPF",
-        number: "19119119100"
-    }
-  },
-  cart: {
-    total: "100.00",
-    items: [
-      {
-        description: "Product description",
-        quantity: 1,
-        price_unit: "100.00",
-        discount: "0.00",
-        taxes: "0.00",
-        product_reference: "PROD123",
-        name: "Product Name",
-        amount_total: "100.00",
-      },
-    ],
-  },
-  currency: "MXN",
-  metadata: {
-    order_id: "ORDER123",
-  },
-  // For a new card:
-  card: {
-    card_number: "4111111111111111",
-    cvv: "123",
-    expiration_month: "12",
-    expiration_year: "25",
-    cardholder_name: "John Doe",
-  },
-  // card: "skyflow_id" // for a selected saved card.
-  // payment_method: "Spei", // For the selected payment method.
-  // apm_config: {} // Optional, only for APMs like Mercado Pago, Oxxo Pay
-};
-```
-
-## Field Validation Functions
-
-For LiteCheckout implementations, the SDK provides validation functions to ensure the integrity of card data before submitting:
-
-- `validateCardNumber(cardNumber)`: Validates the card number using the Luhn algorithm.
-- `validateCardholderName(name)`: Checks if the cardholder name is valid.
-- `validateCVV(cvv)`: Ensures the CVV is in the correct format.
-- `validateExpirationDate(expirationDate)`: Validates the expiration date in MM/YY format.
-- `validateExpirationMonth(month)`: Checks if the expiration month is valid.
-- `validateExpirationYear(year)`: Validates the expiration year.
-
-Example usage:
-
-```javascript
-import {
-  validateCardNumber,
-  validateCardholderName,
-  validateCVV,
-  validateExpirationDate,
-} from "@tonder.io/ionic-lite-sdk";
-
-const cardNumber = "4111111111111111";
-const cardholderName = "John Doe";
-const cvv = "123";
-const expirationDate = "12/25";
-
-if (
-  validateCardNumber(cardNumber) &&
-  validateCardholderName(cardholderName) &&
-  validateCVV(cvv) &&
-  validateExpirationDate(expirationDate)
-) {
-  // Proceed with payment
-} else {
-  // Show error message
-}
-```
-
-
-## API Reference
-
-### LiteCheckout Methods
-
-- `configureCheckout(data)`: Set initial checkout data
-- `injectCheckout()`: Initialize the checkout
-- `getCustomerCards()`: Retrieve saved cards
-- `saveCustomerCard(cardData)`: Save a new card
-- `removeCustomerCard(cardId)`: Remove a saved card
-- `getCustomerPaymentMethods()`: Get available payment methods
-- `payment(data)`: Process a payment
-- `verify3dsTransaction()`: Verify a 3DS transaction
-- `mountCardFields({ fields, card_id })`: Mounts card input fields (e.g., CVV) for a saved card. Useful for requesting CVV when listing saved cards. 
-
-#### mountCardFields
-
-Mounts card input fields (currently CVV) for a saved card. When a `card_id` is provided, the CVV input will be associated with that specific card, allowing you to update its CVV. This is useful for workflows where you need to request CVV for saved cards before payment.
-
-**Parameters:**
-
-| Name    | Type     | Required | Description                                                         |
-|---------|----------|----------|---------------------------------------------------------------------|
-| fields  | string[] | Yes      | Array of fields to mount (currently supports `["cvv"]`).            |
-| card_id | string   | No       | Card ID of the saved card. Associates the CVV input with this card. |
-
-**Important Notes:**
-1. **Single Card Selection Only:** The CVV input for a saved card must only be displayed when a specific card is selected.
-2. **One CVV Input at a Time:** You cannot display multiple CVV inputs for different cards simultaneously. Only one CVV update operation should be active at any given time.
-3. **Mutually Exclusive with Card Form:** The CVV input for a saved card cannot be shown at the same time as the full card enrollment form. These are two separate workflows:
-   - **Save New Card:** Use the complete card form without `card_id`.
-   - **Update CVV for Saved Card:** Use CVV input with `card_id` only.
-
-**Example:**
-```tsx
-// Update CVV for a saved card
-
-// 1. Place the div in your component where the CVV field will be mounted
-<div id={`collect_cvv_saved-card-id`}></div>
-
-// 2. Call mountCardFields and pass the card_id of the selected card
-liteCheckout.mountCardFields({ fields: ["cvv"], card_id: "saved-card-id" });
-
-
-```
-
-## Error Handling
-
-Public SDK methods that fail due to API/SDK execution return an `AppError` (with `name: "TonderError"`).
-
-### Error structure
-
-```json
-{
-  "status": "error",
-  "name": "TonderError",
-  "code": "PAYMENT_PROCESS_ERROR",
-  "message": "There was an issue processing the payment.",
-  "statusCode": 500,
-  "details": {
-    "code": "PAYMENT_PROCESS_ERROR",
-    "statusCode": 500,
-    "systemError": "APP_INTERNAL_001"
-  }
-}
-```
-
-Notes:
-- `statusCode` comes from HTTP response when available; otherwise defaults to `500`.
-- `details.systemError` comes from backend error code when available; otherwise defaults to `APP_INTERNAL_001`.
-- In card-on-file flow failures, the SDK returns `CARD_ON_FILE_DECLINED`.
-
-### Public method error mapping
-
-| Method | Returned `error.code` |
-|---|---|
-| `payment(data)` | `PAYMENT_PROCESS_ERROR` or `CARD_ON_FILE_DECLINED` |
-| `getCustomerCards()` | `FETCH_CARDS_ERROR` |
-| `saveCustomerCard(cardData)` | `SAVE_CARD_ERROR` or `CARD_ON_FILE_DECLINED` |
-| `removeCustomerCard(cardId)` | `REMOVE_CARD_ERROR` |
-| `getCustomerPaymentMethods()` | `FETCH_PAYMENT_METHODS_ERROR` |
-
-
-## Examples
-
-Here are examples of how to implement Tonder Lite SDK:
-
-### Angular
-
-For Angular, we recommend using a service to manage the Tonder instance:
+**Angular component:**
 
 ```typescript
-// tonder.service.ts
-import { Injectable } from "@angular/core";
-import { LiteCheckout } from "@tonder.io/ionic-lite-sdk";
-import {ILiteCheckout} from "@tonder.io/ionic-lite-sdk/dist/types/liteInlineCheckout";
+import { Component, OnInit } from '@angular/core';
+import { LiteCheckout, AppError } from '@tonder.io/ionic-lite-sdk';
 
-@Injectable({
-  providedIn: "root",
-})
-export class TonderService {
-  private liteCheckout!: ILiteCheckout;
-
-  constructor(@Inject(Object) private sdkParameters: IInlineLiteCheckoutOptions) {
-    this.initializeInlineCheckout();
-  }
-
-  private initializeInlineCheckout(): void {
-    this.liteCheckout = new LiteCheckout({ ...this.sdkParameters });
-  }
-
-  configureCheckout(customerData: IConfigureCheckout): void {
-    return this.liteCheckout.configureCheckout({ ...customerData });
-  }
-
-  async injectCheckout(): Promise<void> {
-    return await this.liteCheckout.injectCheckout();
-  }
-
-  verify3dsTransaction(): Promise<ITransaction | IStartCheckoutResponse | void> {
-    return this.liteCheckout.verify3dsTransaction();
-  }
-
-  payment(
-      checkoutData: IProcessPaymentRequest,
-  ): Promise<IStartCheckoutResponse> {
-      return this.inlineCheckout.payment(checkoutData);
-  }
-
-  // Add more functions, for example for lite sdk: get payment methods
-
-  // getCustomerPaymentMethods(): Promise<IPaymentMethod[]> {
-  //     return this.liteCheckout.getCustomerPaymentMethods();
-  // }
-}
-
-// checkout.component.ts
-import { Component, OnInit, OnDestroy } from "@angular/core";
-import { TonderService } from "./tonder.service";
-
-@Component({
-  selector: "app-tonder-checkout",
-  template: `
-    <div id="container">
-      <form [formGroup]="paymentForm">
-        <div class="lite-container-tonder">
-            <div id="id-name" class="empty-div">
-              <label for="name">Namess: </label>
-              <input id="name" type="text" formControlName="name">
-            </div>
-            <div id="id-cardNumber" class="empty-div">
-              <label for="cardNumber">Card number: </label>
-              <input id="cardNumber" type="text" formControlName="cardNumber">
-            </div>
-            <div class="collect-row">
-              <div class="empty-div">
-                <label for="month">Month: </label>
-                <input id="month" type="text" formControlName="month">
-              </div>
-              <div class="expiration-year">
-                <label for="expirationYear">Year: </label>
-                <input id="expirationYear" type="text" formControlName="expirationYear">
-              </div>
-              <div class="empty-div">
-                <label for="cvv">CVV: </label>
-                <input id="cvv" type="text" formControlName="cvv">
-              </div>
-            </div>
-          <div id="msgError">{{ errorMessage }}</div>
-          <div id="msgNotification"></div>
-          <div class="container-pay-button">
-            <button class="lite-pay-button" (click)="onPayment($event)">Pay</button>
-          </div>
-        </div>
-    
-      </form>
-    </div>
-  `,
-  providers: [
-    {
-      provide: TonderInlineService,
-      // Initialization of the Tonder Lite SDK.
-      // Note: Replace these credentials with your own in development/production.
-      useFactory: () =>
-        new TonderInlineService({
-          apiKey: "11e3d3c3e95e0eaabbcae61ebad34ee5f93c3d27",
-          returnUrl: "http://localhost:8100/tabs/tab5",
-          mode: "stage",
-        }),
-    },
-  ],
-})
-export class TonderCheckoutComponent implements OnInit, OnDestroy {
+@Component({ selector: 'app-checkout', templateUrl: './checkout.component.html' })
+export class CheckoutComponent implements OnInit {
+  private liteCheckout!: LiteCheckout;
   loading = false;
-  checkoutData: IProcessPaymentRequest;
-  paymentForm = new FormGroup({
-      name: new FormControl('Pedro Paramo'),
-      cardNumber: new FormControl('4242424242424242'),
-      month: new FormControl('12'),
-      expirationYear: new FormControl('28'),
-      cvv: new FormControl('123')
-  });
-  
-  constructor(private tonderService: TonderService) {
-      this.checkoutData = {
-          customer: {
-              firstName: "Jhon",
-              lastName: "Doe",
-              email: "john.c.calhoun@examplepetstore.com",
-              phone: "+58452258525"
-          },
-          cart: {
-              total: 25,
-              items: [
-                  {
-                      description: "Test product description",
-                      quantity: 1,
-                      price_unit: 25,
-                      discount: 1,
-                      taxes: 12,
-                      product_reference: 89456123,
-                      name: "Test product",
-                      amount_total: 25
-                  }
-              ]
-          },
-          metadata: {},
-          currency: "MXN"
+
+  async ngOnInit() {
+    // Step 1 — Create instance
+    this.liteCheckout = new LiteCheckout({
+      apiKey: 'YOUR_PUBLIC_API_KEY',
+      mode: 'stage',
+      returnUrl: `${window.location.origin}/checkout`,
+    });
+
+    // Step 2 — Fetch secure token from YOUR backend (never expose YOUR_SECRET_API_KEY on the frontend)
+    // Your backend calls POST https://stage.tonder.io/api/secure-token/ with the secret key
+    // and returns { access: string } to the client.
+    const { access } = await fetch('/api/tonder-secure-token', {
+      method: 'POST',
+    }).then(r => r.json());
+
+    // Step 3 — Configure with customer + token
+    this.liteCheckout.configureCheckout({
+      customer: { email: 'user@example.com' },
+      secureToken: access,
+      // cart: { total: 100, items: [...] },
+      // currency: 'MXN',
+      // order_reference: 'ORD-001',           // your internal order ID — shows in Tonder dashboard & exports
+      // metadata: { order_id: 'ORD-001' },    // reporting metadata — see Section 6.1
+    });
+
+    // Step 4 — Initialize checkout (must be awaited)
+    await this.liteCheckout.injectCheckout();
+
+    // Step 5 — Check if returning from a 3DS redirect
+    // Only needed when redirectOnComplete: true (default). In iframe mode
+    // (redirectOnComplete: false) the payment() promise resolves directly — skip this step.
+    // If this page load is a return from a 3DS challenge, the SDK verifies the
+    // transaction and, if routing is configured, may automatically retry with
+    // the next payment route. Await the result before deciding what to do next.
+    const tdsResult = await this.liteCheckout.verify3dsTransaction();
+    if (tdsResult) {
+      const status = (tdsResult as any).transaction_status;
+      if (status === 'Success' ) {
+        // navigate to order confirmation
+      } else {
+        // show error to the user
       }
-  }
+      return; // do not mount card fields — the payment flow already completed
+    }
 
-  ngOnInit() {
-    this.initCheckout();
-  }
-
-  async initCheckout() {
-    this.tonderService.configureCheckout({
-      customer: { email: "example@email.com" },
+    // Step 6 — Normal page load: mount secure card input iframes
+    await this.liteCheckout.mountCardFields({
+      fields: ['cardholder_name', 'card_number', 'expiration_month', 'expiration_year', 'cvv'],
     });
-    await this.tonderService.injectCheckout();
-    this.tonderService.verify3dsTransaction().then((response) => {
-      console.log("Verify 3ds response", response);
-    });
-    
-    // Calls more functions to get payment methods, saved cards, etc.
   }
 
   async pay() {
     this.loading = true;
     try {
-      const response = await this.tonderService.payment({
-          ...this.checkoutData,
-          card: { // Card details, if not using a payment method.
-              card_number: this.paymentForm.value.cardNumber || "",
-              cvv: this.paymentForm.value.cvv || "",
-              expiration_month: this.paymentForm.value.month || "",
-              expiration_year: this.paymentForm.value.expirationYear || "",
-              cardholder_name: this.paymentForm.value.name || ""
-          },
-          // card: "skyflow_id" // In case a saved card is selected.
-          // payment_method: "" // Payment method if not using the card form
+      const response = await this.liteCheckout.payment({
+        customer: { email: 'user@example.com' },
+        cart: {
+          total: 100,
+          items: [{
+            name: 'Product A', description: 'Product description',
+            quantity: 1, price_unit: 100, discount: 0, taxes: 0,
+            product_reference: 'SKU-001', amount_total: 100,
+          }],
+        },
+        currency: 'MXN',
+        // order_reference: 'ORD-001',           // your internal order ID — shows in Tonder dashboard & exports
+        // metadata: { order_id: 'ORD-001' },    // reporting metadata — see Section 6.1
       });
-      console.log("Payment successful:", response);
-      alert("Payment successful");
+      console.log('Transaction status:', response.transaction_status);
     } catch (error) {
-      console.error("Payment failed:", error);
-      alert("Payment failed");
-    } finally {
-      this.loading = false;
+      if (error instanceof AppError) {
+        console.error(`[${error.code}] ${error.message}`);
+      }
     }
   }
 }
 ```
 
-### React: Request CVV for saved card
+> **Security note:** In this example `YOUR_SECRET_API_KEY` is hardcoded for brevity. In production, move this `fetch` call to your own backend and return only the `access` token to the frontend. See [Section 4](#4-initialization-sequence).
 
-```tsx
-import { LiteCheckout } from '@tonder.io/ionic-lite-sdk';
-import { useEffect, useState } from 'react';
+---
 
-const checkoutData = {
-  customer: {
-      firstName: "Adrian",
-      lastName: "Martinez",
-      country: "Mexico",
-      address: "Pinos 507, Col El Tecuan",
-      city: "Durango",
-      state: "Durango",
-      postCode: "34105",
-      email: "test@example.com",
-      phone: "8161234567",
-  },
-  cart: {
-    total: 120,
-    items: [
-      {
-        description: "Test product description",
-        quantity: 1,
-        price_unit: 120,
-        discount: 25,
-        taxes: 12,
-        product_reference: 12,
-        name: "Test product",
-        amount_total: 120
-      }
-    ]
-  },
-  currency: "MXN",
-  // Reference from the merchant
-  order_reference: "ORD-123456",
-  metadata: {
-      business_user: "123456-test"
-  },
-};
+## 2. Installation
 
-const ExploreContainer = () => {
-  const [liteCheckout, setLiteCheckout] = useState<any>(null);
-  const [cards, setCards] = useState<any[]>([]);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (!liteCheckout) {
-      setLoading(true);
-      initializeTonderSDK();
-    }
-  }, []);
-
-  useEffect(() => {
-    if (liteCheckout) {
-      fetchCards();
-    }
-  }, [liteCheckout]);
-
-  const initializeTonderSDK = async () => {
-    const sdk = new LiteCheckout({
-      mode: "stage",
-      apiKey: "YOUR_API_KEY",
-      returnUrl: window.location.href,
-      customization: { redirectOnComplete: false },
-      events: {
-        cvvEvents: {
-          onChange: (data) => {
-            console.log("CVV onChange event data:", data);
-          }
-        }
-      }
-    });
-    setLiteCheckout(sdk);
-
-    // Get secure token from your backend
-    const token = "123"
-
-    sdk.configureCheckout({ ...checkoutData, secureToken: token });
-    await sdk.injectCheckout();
-    sdk.verify3dsTransaction().then((response: any) => {
-      console.log('Verify 3ds response', response);
-    });
-    setLoading(false);
-  };
-
-  const fetchCards = async () => {
-    const response = await liteCheckout.getCustomerCards();
-    setCards(response.cards || []);
-  };
-
-  const handleSelectCard = (cardId: string) => {
-    if (cardId === selectedCardId) return;
-    setSelectedCardId(cardId);
-    liteCheckout.mountCardFields({ fields: ["cvv"], card_id: cardId });
-  };
-
-  const handlePayment = async () => {
-    if (!selectedCardId) return;
-    try {
-      const response = await liteCheckout.payment({ ...checkoutData, card: selectedCardId });
-    } catch (err) {
-      console.error("Payment error:", err);
-    }
-  };
-
-  return (
-    <div className="container">
-      <iframe className="tds-iframe" allowTransparency={true} id="tdsIframe"></iframe>
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px 0', color: '#007AFF' }}>
-          <div style={{ fontWeight: 600, fontSize: 18 }}>Loading checkout...</div>
-        </div>
-      ) : (
-        <>
-          <p>Saved cards:</p>
-          <div style={{ marginBottom: 24 }}>
-            {cards.length > 0 ? (
-              cards.map((card: any) => (
-                <div
-                  key={card.fields.skyflow_id}
-                  style={{
-                    background: selectedCardId === card.fields.skyflow_id ? '#E3F2FD' : '#f9f9f9',
-                    borderRadius: 12,
-                    border: selectedCardId === card.fields.skyflow_id ? '2px solid #007AFF' : '2px solid transparent',
-                    marginBottom: 12,
-                    padding: 0,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
-                  onClick={() => handleSelectCard(card.fields.skyflow_id)}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', padding: 16 }}>
-                    {card.icon && (
-                      <img src={card.icon} alt="card" style={{ width: 50, height: 32, marginRight: 16, objectFit: 'contain' }} />
-                    )}
-                    <div style={{ flex: 1, textAlign: 'left' }}>
-                      <div style={{ fontWeight: 'bold', color: '#333', marginBottom: 4 }}>{card.fields.cardholder_name}</div>
-                      <div style={{ color: '#666', marginBottom: 4 }}>•••• •••• •••• {card.fields.card_number.slice(-4)}</div>
-                      <div style={{ color: '#999', fontSize: 12 }}>Expires: {card.fields.expiration_month}/{card.fields.expiration_year}</div>
-                    </div>
-                    {selectedCardId === card.fields.skyflow_id && (
-                      <div
-                        style={{ marginLeft: 12, width: 120, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee', padding: 8, textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <div style={{ maxHeight: '90px' }} id={`collect_cvv_${card.fields.skyflow_id}`}></div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
-                <div style={{ fontWeight: 600, fontSize: 16 }}>No saved cards</div>
-                <div style={{ fontSize: 14, color: '#bbb' }}>Add a card to use this method</div>
-              </div>
-            )}
-          </div>
-          <button style={{ padding: '10px', background: '#ddd' }} onClick={handlePayment}>
-            Pay with saved card
-          </button>
-        </>
-      )}
-    </div>
-  );
-};
+```bash
+npm install @tonder.io/ionic-lite-sdk
+# or
+yarn add @tonder.io/ionic-lite-sdk
 ```
 
+---
 
-## Return secure token
+## 3. Constructor & Configuration
+
+### 3.1 Options reference
 
 ```typescript
-{
-    access: string;
+import { LiteCheckout } from '@tonder.io/ionic-lite-sdk';
+
+const liteCheckout = new LiteCheckout(options);
+```
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `apiKey` | `string` | **Required** | — | Public API key from the Tonder Dashboard |
+| `mode` | `'stage' \| 'production'` | **Required** | `'stage'` | Target environment |
+| `returnUrl` | `string` | **Required for 3DS** | — | URL to which 3DS redirects return after authentication |
+| `callBack` | `(response) => void` | Optional | `undefined` | Called after a successful payment or card enrollment |
+| `customization` | `ILiteCustomizationOptions` | Optional | `undefined` | Styles, labels, placeholders, and redirect behavior |
+| `events` | `ICardFormEvents` | Optional | `undefined` | `onChange` / `onFocus` / `onBlur` callbacks per field |
+| `tdsIframeId` | `string` | Optional | `'tdsIframe'` | DOM `id` of the 3DS `<iframe>` element |
+
+**Full example:**
+
+```typescript
+const liteCheckout = new LiteCheckout({
+  apiKey: 'YOUR_PUBLIC_API_KEY',
+  mode: 'production',
+  returnUrl: 'https://myapp.com/checkout',
+  callBack: (response) => console.log('Payment done', response),
+  tdsIframeId: 'myCustomTdsFrame',
+  customization: {
+    redirectOnComplete: false,  // render 3DS challenge inside #tdsIframe instead of full-page redirect
+    styles: { enableCardIcon: true },
+  },
+  events: {
+    cardNumberEvents: {
+      onChange: (e) => console.log('Card number valid:', e.isValid),
+    },
+  },
+});
+```
+
+---
+
+### 3.2 Customization options
+
+```typescript
+interface ILiteCustomizationOptions {
+  styles?: IStyles;           // Field and form visual styles (see Section 11)
+  labels?: IFormLabels;       // Label text per field
+  placeholders?: IFormPlaceholder; // Placeholder text per field
+  redirectOnComplete?: boolean;    // default: true
 }
 ```
 
-## Deprecated Fields
+**`redirectOnComplete`** controls how 3DS challenges are displayed when the payment processor requires authentication:
 
-The following fields have been deprecated and should no longer be used. Consider using the recommended alternatives:
+| Value | Behavior |
+|-------|----------|
+| `true` (default) | SDK performs a **full-page redirect** to the 3DS challenge URL. The user leaves your app, completes authentication on the bank's page, and is sent back to `returnUrl`. |
+| `false` | The 3DS challenge is rendered **inside the `#tdsIframe` element**. The user stays in your app until the challenge resolves. |
 
-## Register customer card
-### `apiKeyTonder` Property
+> Use `redirectOnComplete: false` when you want to keep the user inside the app (e.g., in a mobile WebView). Make sure the `#tdsIframe` is styled to cover the screen when active — see [Section 7](#7-3ds-handling).
 
-- **Deprecated Reason:** The `apiKeyTonder` property in the constructor and `IInlineLiteCheckoutOptions` interface is no longer required.
-- **Alternative:** Use the `apiKey` field.
+---
 
-### `baseUrlTonder` Property
+### 3.3 Form events
 
-- **Deprecated Reason:** The `baseUrlTonder` property in the constructor and `IInlineLiteCheckoutOptions` interface is no longer required.
-- **Alternative:** Use the `mode` field with `stage` | `development` | `sandbox` | `production` options.
+Register callbacks to react to field state changes (validation, focus, etc.):
 
-### `signal` Property
+```typescript
+interface ICardFormEvents {
+  cardHolderEvents?: IInputEvents;
+  cardNumberEvents?: IInputEvents;
+  cvvEvents?: IInputEvents;
+  monthEvents?: IInputEvents;
+  yearEvents?: IInputEvents;
+}
 
-- **Deprecated Reason:** The `signal` property in the constructor and `IInlineLiteCheckoutOptions` interface is no longer required.
+interface IInputEvents {
+  onChange?: (event: IEventSecureInput) => void;
+  onFocus?: (event: IEventSecureInput) => void;
+  onBlur?: (event: IEventSecureInput) => void;
+}
 
+interface IEventSecureInput {
+  elementType: string;  // e.g. 'CARD_NUMBER', 'CVV', 'CARDHOLDER_NAME'
+  isEmpty: boolean;
+  isFocused: boolean;
+  isValid: boolean;
+  value?: string;       // See PCI note below
+}
+```
 
-## Deprecated Functions
+> **PCI note:** `value` is only populated in `development` mode. In `production`, `value` is always `''` for sensitive fields (`card_number`, `cvv`); non-sensitive fields (`cardholder_name`, `expiration_month`, `expiration_year`) may still return their value. Use `isValid` and `isEmpty` for UI state logic — never depend on `value` in production.
 
-The following functions have been deprecated and should no longer be used. Consider using the recommended alternatives:
+**Example — live card form validation:**
 
-### `customerRegister`
+```typescript
+events: {
+  cardNumberEvents: {
+    onChange: (e) => { this.cardNumberValid = e.isValid; },
+    onBlur: (e) => { this.showCardNumberError = !e.isValid && !e.isEmpty; },
+  },
+  cvvEvents: {
+    onChange: (e) => { this.cvvValid = e.isValid; },
+  },
+}
+```
 
-- **Deprecated Reason:** This function is no longer necessary as registration is now automatically handled during payment processing or when using card management methods.
+---
 
-### `createOrder` and `createPayment`
+## 4. Initialization Sequence
 
-- **Deprecated Reason:** These functions have been replaced by the `payment` function, which now automatically handles order creation and payment processing.
-- **Alternative:** Use the `payment` function.
+The SDK must be initialized in this exact order before any other method is called:
 
-### `startCheckoutRouter` and `startCheckoutRouterFull`
+```
+1. new LiteCheckout(options)
+        ↓
+2. fetch baseUrl/api/secure-token/   →  { access: string }
+        ↓
+3. configureCheckout({ customer, secureToken, ...optional })
+        ↓
+4. await injectCheckout()            (must be awaited)
+        ↓
+5. result = await verify3dsTransaction()  (redirectOnComplete: true only — void on normal loads)
+        ↓ if result → handle and return early; if void → continue ↓
+6. await mountCardFields(...)            (mounts secure iframes into your divs)
+```
 
-- **Deprecated Reason:** These functions have been replaced by the `payment` function.
-- **Alternative:** Use the `payment` function.
+**Base URL by environment:**
 
-### `registerCustomerCard`
+| `mode` | Base URL |
+|--------|---------|
+| `'stage'` | `https://stage.tonder.io` |
+| `'production'` | `https://app.tonder.io` |
 
-- **Deprecated Reason:** This function has been renamed to `saveCustomerCard` to better align with its purpose. The method's usage has also been updated.
-- **Alternative:** Use the `saveCustomerCard` method and update your implementation to reflect the changes.
+---
 
-### `deleteCustomerCard`
+### Fetching the secure token
 
-- **Deprecated Reason:** This function has been renamed to `removeCustomerCard` to better align with its purpose. The method's usage has also been updated.
-- **Alternative:** Use the `removeCustomerCard` method and update your implementation to reflect the changes.
+The secure token is a short-lived credential required for `configureCheckout`. Fetch it from Tonder's API using your **secret API key** in the `Authorization` header:
 
-### `getActiveAPMs`
+```typescript
+const { access } = await fetch(`${baseUrl}/api/secure-token/`, {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Token YOUR_SECRET_API_KEY',
+    'Content-Type': 'application/json',
+  },
+}).then(r => r.json());
+```
 
-- **Deprecated Reason:** This function has been renamed to `getCustomerPaymentMethods` to better align with its purpose. The method's usage has also been updated.
-- **Alternative:** Use the `getCustomerPaymentMethods` method and update your implementation to reflect the changes.
+> **Security note:** `YOUR_SECRET_API_KEY` is a server-side credential. In production, make this request from your own backend and return only the `access` token to the frontend. Never expose your secret key in client-side code.
 
-### `getSkyflowTokens`
+---
 
-- **Deprecated Reason:** Card registration and checkout are now automatically handled during the payment process or through card management methods, making this method unnecessary.
+### `injectCheckout()`
 
-### `getOpenpayDeviceSessionID`
+Initializes the checkout session. Must be **awaited** before calling `mountCardFields`.
 
-- **Deprecated Reason:** It is no longer necessary to use this method is now automatically handled during the payment process.
+```typescript
+await liteCheckout.injectCheckout();
+```
 
+> **Important:** Calling `mountCardFields()` before `injectCheckout()` resolves will throw `SKYFLOW_NOT_INITIALIZED`.
 
-## Notes
+---
 
-### General
+### `configureCheckout(data)`
 
-- Replace `apiKey`, `mode`, `returnUrl` with your actual values.
-- Remember to use the `configureCheckout` function after creating an instance of `LiteCheckout`. This ensures that functions such as payment processing, saving cards, deleting cards, and others work correctly.
+Sets the customer identity and secure token for the current session. Fields like `cart`, `currency`, `metadata`, and `order_reference` can also be passed here as defaults — any field provided again in `payment()` will override them.
 
+```typescript
+interface IConfigureCheckout {
+  customer: { email: string } | ICustomer;  // Required — minimum: { email }
+  secureToken: string;                       // Required — from the token fetch
+  cart?: { total: number | string; items: IItem[] };
+  currency?: string;
+  order_reference?: string;  // your internal order ID — shown in Tonder dashboard & exports
+  metadata?: Record<string, any>; // reporting fields — see Section 6.1
+  card?: string;           // skyflow_id — pre-selects a saved card for payment()
+  payment_method?: string; // APM identifier — pre-selects an APM for payment()
+}
+```
 
-## License
+```typescript
+liteCheckout.configureCheckout({
+  customer: { email: 'user@example.com' },
+  secureToken: access,
+});
+```
 
-[MIT](https://choosealicense.com/licenses/mit/)
+---
+
+### `verify3dsTransaction()`
+
+Only relevant when `redirectOnComplete: true` (the default). When using `redirectOnComplete: false` (iframe mode), `payment()` resolves the promise directly after the challenge completes — skip this call entirely.
+
+When using the default mode, call this on **every page load**. If the page was loaded as a return from a 3DS redirect, it verifies the transaction and — if the merchant has routing configured and the transaction was declined — **automatically retries with the next payment route**. Resolves with the final transaction result, or `void` on a normal (non-3DS) page load.
+
+```typescript
+const result = await liteCheckout.verify3dsTransaction();
+
+if (result) {
+  // Returning from 3DS — routing may have been applied automatically
+  const status = (result as any).transaction_status;
+  if (status === 'Success') {
+    // navigate to confirmation
+  } else {
+    // show error
+  }
+  return; // do not proceed to mountCardFields
+}
+
+// Normal page load — continue with checkout initialization
+await liteCheckout.mountCardFields({ ... });
+```
+
+---
+
+## 5. Collecting Card Data — `mountCardFields`
+
+Mounts secure iframes into your `<div>` containers. Card values are captured directly inside the iframe and **never pass through your application code**.
+
+> **Prerequisite:** The container `<div>` elements must exist in the DOM before calling `mountCardFields()`.
+
+```typescript
+interface IMountCardFieldsRequest {
+  fields: (CardField | { field: CardField; container_id?: string })[];
+  card_id?: string;           // Omit for new card; provide skyflow_id for saved-card CVV
+  unmount_context?: 'all' | 'current' | 'create' | string; // default: 'all'
+}
+
+type CardField =
+  | 'cardholder_name'
+  | 'card_number'
+  | 'expiration_month'
+  | 'expiration_year'
+  | 'cvv';
+```
+
+---
+
+### 5.1 New-card form (all 5 fields)
+
+**Default container IDs** (used when no custom `container_id` is provided):
+
+| Field | Default Container ID |
+|-------|---------------------|
+| `cardholder_name` | `#collect_cardholder_name` |
+| `card_number` | `#collect_card_number` |
+| `expiration_month` | `#collect_expiration_month` |
+| `expiration_year` | `#collect_expiration_year` |
+| `cvv` | `#collect_cvv` |
+
+**HTML:**
+```html
+<div id="collect_cardholder_name"></div>
+<div id="collect_card_number"></div>
+<div id="collect_expiration_month"></div>
+<div id="collect_expiration_year"></div>
+<div id="collect_cvv"></div>
+```
+
+**TypeScript — shorthand (string array):**
+```typescript
+await liteCheckout.mountCardFields({
+  fields: ['cardholder_name', 'card_number', 'expiration_month', 'expiration_year', 'cvv'],
+});
+```
+
+**TypeScript — custom container IDs:**
+```typescript
+await liteCheckout.mountCardFields({
+  fields: [
+    { field: 'cardholder_name', container_id: '#my-name' },
+    { field: 'card_number',     container_id: '#my-card-number' },
+    { field: 'expiration_month', container_id: '#my-month' },
+    { field: 'expiration_year',  container_id: '#my-year' },
+    { field: 'cvv',              container_id: '#my-cvv' },
+  ],
+});
+```
+
+---
+
+### 5.2 Saved-card CVV only
+
+For saved-card payments, mount only the CVV field for the selected card. The default container ID is `#collect_cvv_<skyflow_id>`.
+
+```html
+<!-- Use the card's skyflow_id as part of the container id -->
+<div id="collect_cvv_abc123"></div>
+```
+
+```typescript
+liteCheckout.mountCardFields({
+  fields: ['cvv'],
+  card_id: 'abc123',  // card.fields.skyflow_id
+});
+```
+
+> **Note:** Cards with `subscription_id` do not require CVV entry. See [Section 8.4](#84-card-on-file-subscription_id).
+
+**Conditional CVV mount pattern:**
+```typescript
+handleSelectCard(card: ICard) {
+  if (this.selectedCard?.fields?.skyflow_id === card.fields.skyflow_id) return;
+  this.selectedCard = card;
+
+  // Only mount CVV for cards that don't have a Card On File subscription
+  if (!card.fields.subscription_id) {
+    this.liteCheckout.mountCardFields({
+      fields: ['cvv'],
+      card_id: card.fields.skyflow_id,
+    });
+  }
+}
+```
+
+---
+
+### 5.3 Unmounting fields
+
+`mountCardFields()` automatically unmounts previously mounted fields before mounting new ones — you don't need to call `unmountCardFields()` manually when switching between cards or modes.
+
+The `unmount_context` parameter on `mountCardFields` controls what gets cleared before the new fields are mounted:
+
+| `unmount_context` | What gets unmounted before mounting |
+|-------------------|-------------------------------------|
+| `'all'` (default) | All mounted fields across all contexts |
+| `'current'` | Only the current context (new-card or the active saved-card CVV) |
+| `'create'` | New-card form fields only |
+| `'update:skyflow_id'` | CVV field for a specific saved card |
+
+**The only case where you call `unmountCardFields()` directly** is when navigating away from the checkout screen without remounting:
+
+```typescript
+ngOnDestroy() {
+  this.liteCheckout.unmountCardFields();
+}
+```
+
+> **Important notes:**
+> 1. Never show the new-card form (all 5 fields) and a saved-card CVV field simultaneously.
+> 2. Only one saved-card CVV input should be active at a time.
+> 3. Always `mountCardFields()` and let the user fill in the fields **before** calling `payment()` or `saveCustomerCard()`.
+
+---
+
+## 6. Processing Payments
+
+### 6.1 New card payment
+
+**Prerequisites:** [Section 5.1](#51-new-card-form-all-5-fields) — all 5 card fields must be mounted and filled by the user.
+
+```typescript
+interface IProcessPaymentRequest {
+  customer: ICustomer | { email: string };         // Required
+  cart: { total: string | number; items: IItem[] }; // Required
+  currency?: string;                               // Optional — ISO code e.g. 'MXN'
+  order_reference?: string | null;                 // Recommended — your internal order ID; shown in Tonder dashboard, filters, and exports
+  metadata?: Record<string, any>;                  // Recommended — fields shown in Tonder transaction exports (see table below)
+  isSandbox?: boolean;                             // Optional — Openpay sandbox mode
+  apm_config?: Record<string, any>;                // Optional — APM-specific config (Mercado Pago, etc.)
+  // card — OMIT for new-card payment
+  // payment_method — OMIT for card payment
+}
+```
+
+#### Metadata for Reporting
+
+To ensure proper visibility in Tonder's **transaction and dispute reports**, pass the following fields inside `metadata`. They are included in exported reports and help link transactions to customer activity, business users, and external systems.
+
+| Field | Type | Report column | Description |
+|-------|------|---------------|-------------|
+| `order_reference` | `string` | Business Transaction ID | Merchant's internal order ID. Shown in Tonder dashboard filters and exports. Recommended on every payment. |
+| `metadata.order_id` | `string` | Business Transaction ID | Takes precedence over `order_reference` when both are provided. |
+| `metadata.operation_date` | `Date \| string` | Customer ID (metadata) | Business operation date for reporting and reconciliation. |
+| `metadata.customer_email` | `string` | Customer Email | Overrides the email shown in reports. Falls back to `customer.email` if omitted. |
+| `metadata.business_user` | `string` | Business User (metadata) | Internal user or system that initiated the payment (e.g. POS terminal ID, cashier ID). |
+| `metadata.customer_id` | `string` | Customer ID (metadata) | Your internal customer identifier — correlates payments with customer records. |
+
+> **Tip:** At minimum, pass `order_reference` on every payment so your orders appear correctly in Tonder's dashboard and exports.
+
+**`ICustomer`:**
+```typescript
+type ICustomer = {
+  firstName: string;   // Required
+  lastName: string;    // Required
+  email: string;       // Required
+  phone?: string;
+  country?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  postCode?: string;
+  address?: string;
+  identification?: { type: string; number: string };
+};
+```
+
+**`IItem`:**
+```typescript
+interface IItem {
+  name: string;
+  description: string;
+  quantity: number;
+  price_unit: number;
+  amount_total: number;
+  discount: number;
+  taxes: number;
+  product_reference: string | number;
+}
+```
+
+**Example:**
+```typescript
+async pay() {
+  this.loading = true;
+  try {
+    const response = await this.liteCheckout.payment({
+      customer: {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@example.com',
+        phone: '+1 555 0100',
+        country: 'MX',
+        city: 'CDMX',
+        street: '123 Main St',
+        state: 'CMX',
+        postCode: '06600',
+      },
+      cart: {
+        total: 150,
+        items: [{
+          name: 'Product A',
+          description: 'Product description',
+          quantity: 1,
+          price_unit: 150,
+          discount: 0,
+          taxes: 0,
+          product_reference: 'SKU-001',
+          amount_total: 150,
+        }],
+      },
+      currency: 'MXN',
+      metadata: { order_id: 'ORD-789' },
+      order_reference: 'ORD-789',
+    });
+    console.log('Transaction status:', response.transaction_status);
+  } catch (error) {
+    if (error instanceof AppError) {
+      console.error(error.code, error.message);
+      this.errorMessage = error.message;
+    }
+  } finally {
+    this.loading = false;
+  }
+}
+```
+
+---
+
+### 6.2 Saved card payment
+
+**Prerequisites:** Fetch saved cards ([Section 8.1](#81-list-saved-cards)). Conditionally mount the CVV field ([Section 5.2](#52-saved-card-cvv-only)).
+
+```typescript
+const response = await this.liteCheckout.payment({
+  customer: { email: 'user@example.com' },
+  cart: { total: 100, items: [...] },
+  currency: 'MXN',
+  card: selectedCard.fields.skyflow_id,  // the only addition vs. new card
+});
+```
+
+---
+
+### 6.3 Alternative Payment Method (APM)
+
+No `mountCardFields()` call is needed for APM payments.
+
+```typescript
+// 1. Fetch available APMs
+const apms = await this.liteCheckout.getCustomerPaymentMethods();
+// IPaymentMethod = { id, payment_method, priority, category, icon, label }
+
+// 2. User selects an APM
+
+// 3. Pay
+const response = await this.liteCheckout.payment({
+  customer: { email: 'user@example.com' },
+  cart: { total: 100, items: [...] },
+  currency: 'MXN',
+  payment_method: selectedApm.payment_method,  // e.g. 'Spei'
+});
+```
+
+**Mercado Pago — `apm_config`:**
+
+Pass Mercado Pago-specific preferences via `apm_config`:
+
+```typescript
+const response = await this.liteCheckout.payment({
+  ...paymentData,
+  payment_method: 'MercadoPago',
+  apm_config: {
+    back_urls: {
+      success: 'https://myapp.com/success',
+      pending: 'https://myapp.com/pending',
+      failure: 'https://myapp.com/failure',
+    },
+    auto_return: 'approved',
+  },
+});
+```
+
+<details>
+<summary>Full Mercado Pago <code>apm_config</code> fields</summary>
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `binary_mode` | `boolean` | If `true`, payment must be approved or rejected immediately (no pending state) |
+| `additional_info` | `string` | Extra info shown during checkout |
+| `back_urls.success` | `string` | Redirect URL after successful payment |
+| `back_urls.pending` | `string` | Redirect URL after pending payment |
+| `back_urls.failure` | `string` | Redirect URL after failed/canceled payment |
+| `auto_return` | `'approved' \| 'all'` | Enable auto-redirect after payment completion |
+| `payment_methods.excluded_payment_methods[].id` | `string` | Payment method to exclude (e.g. `'visa'`) |
+| `payment_methods.excluded_payment_types[].id` | `string` | Payment type to exclude (e.g. `'ticket'`) |
+| `payment_methods.default_payment_method_id` | `string` | Default payment method (e.g. `'master'`) |
+| `payment_methods.installments` | `number` | Max installments allowed |
+| `payment_methods.default_installments` | `number` | Default installments suggested |
+| `expires` | `boolean` | Whether the preference has an expiration |
+| `expiration_date_from` | `string` (ISO 8601) | Start of validity period |
+| `expiration_date_to` | `string` (ISO 8601) | End of validity period |
+| `statement_descriptor` | `string` | Text on payer's card statement (max 16 chars) |
+| `marketplace` | `string` | Marketplace identifier (default: `'NONE'`) |
+| `marketplace_fee` | `number` | Fee to collect as marketplace commission |
+| `differential_pricing.id` | `number` | Differential pricing strategy ID |
+| `shipments.mode` | `'custom' \| 'me2' \| 'not_specified'` | Shipping mode |
+| `shipments.local_pickup` | `boolean` | Enable local branch pickup |
+| `shipments.cost` | `number` | Shipping cost (custom mode only) |
+| `shipments.free_shipping` | `boolean` | Free shipping flag (custom mode only) |
+| `tracks[].type` | `'google_ad' \| 'facebook_ad'` | Ad tracker type |
+| `tracks[].values.conversion_id` | `string` | Google Ads conversion ID |
+| `tracks[].values.pixel_id` | `string` | Facebook Pixel ID |
+
+</details>
+
+---
+
+### 6.4 Payment response reference
+
+```typescript
+interface IStartCheckoutResponse {
+  status: string;
+  message: string;
+  transaction_status: string;   // 'Success' | 'Pending' | 'Declined' | 'Failed' 
+  transaction_id: number;
+  payment_id: number;
+  checkout_id: string;
+  is_route_finished: boolean;
+  provider: string;
+  psp_response: Record<string, any>;  // Raw response from the payment processor
+}
+```
+
+> **Note:** 3DS authentication is handled automatically by the SDK. You do not need to handle redirection yourself.
+
+---
+
+## 7. 3DS Handling
+
+When a payment requires 3DS authentication, the SDK handles the challenge automatically. There are two display modes, controlled by [`redirectOnComplete`](#32-customization-options):
+
+| `redirectOnComplete` | Challenge display | User experience |
+|----------------------|-------------------|-----------------|
+| `true` (default) | Full-page redirect to bank's 3DS page | User leaves the app; returns to `returnUrl` after completing auth |
+| `false` | Rendered inside `#tdsIframe` in your app | User stays in app until the challenge resolves |
+
+### `redirectOnComplete: true` (default — full-page redirect)
+
+No additional template changes required. Set `returnUrl` in the constructor and call `verify3dsTransaction()` on every page load — see [Section 4 — `verify3dsTransaction()`](#verify3dstransaction) for the full implementation pattern.
+
+**How it works:** `payment()` redirects the browser to the bank's authentication page. After authentication, the bank sends the user back to `returnUrl`. On that page load, `verify3dsTransaction()` completes the verification — if routing is configured and the transaction was declined, it automatically retries with the next route.
+
+---
+
+### `redirectOnComplete: false` (iframe mode — user stays in app)
+
+Recommended for **Ionic / mobile WebViews** where a full-page redirect would break the app flow.
+
+**1. Add the iframe to your template:**
+```html
+<iframe id="tdsIframe" allowtransparency="true" class="tds-iframe"></iframe>
+```
+
+**2. Add CSS — hidden by default, shown full-screen when the challenge activates:**
+```css
+.tds-iframe {
+  display: none;
+  border: none;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 100;
+  background: white;
+}
+```
+
+In this mode the SDK resolves the original `payment()` promise directly when the challenge completes — `verify3dsTransaction()` is not needed.
+
+---
+
+## 8. Managing Saved Cards
+
+### 8.1 List saved cards
+
+```typescript
+getCustomerCards(): Promise<ICustomerCardsResponse>
+```
+
+```typescript
+interface ICustomerCardsResponse {
+  user_id: number;
+  cards: ICard[];
+}
+
+interface ICard {
+  fields: ICardSkyflowFields;
+  icon?: string;  // URL to card brand image
+}
+
+interface ICardSkyflowFields {
+  skyflow_id: string;
+  card_number: string;         // Masked — e.g. 'XXXX-XXXX-XXXX-4242'
+  cardholder_name: string;
+  expiration_month: string;    // e.g. '12'
+  expiration_year: string;     // e.g. '25'
+  card_scheme: string;         // e.g. 'VISA', 'MASTERCARD'
+  subscription_id?: string;    // Present when Card On File is activated on your merchant account — see Section 8.4
+}
+```
+
+**Example:**
+```typescript
+const { cards } = await this.liteCheckout.getCustomerCards();
+
+cards.forEach((card) => {
+  const lastFour = card.fields.card_number.slice(-4);
+  const expiry = `${card.fields.expiration_month}/${card.fields.expiration_year}`;
+  console.log(`${card.fields.card_scheme} •••• ${lastFour} — expires ${expiry}`);
+});
+```
+
+---
+
+### 8.2 Save a new card
+
+**Prerequisites:** All 5 card fields must be mounted via `mountCardFields()` with no `card_id`, and the user must have filled them in.
+
+```typescript
+saveCustomerCard(): Promise<ISaveCardResponse>
+// Returns: { skyflow_id: string; user_id: number }
+```
+
+**Complete enrollment flow:**
+```typescript
+// 1. Mount all 5 fields (see Section 5.1)
+await this.liteCheckout.mountCardFields({
+  fields: ['cardholder_name', 'card_number', 'expiration_month', 'expiration_year', 'cvv'],
+});
+
+// 2. User fills in the card form...
+
+// 3. Save the card
+const saved = await this.liteCheckout.saveCustomerCard();
+console.log('Saved card skyflow_id:', saved.skyflow_id);
+
+// 4. Optionally reveal the saved card data (see Section 9)
+await this.liteCheckout.revealCardFields({
+  fields: ['card_number', 'cardholder_name', 'expiration_month', 'expiration_year'],
+});
+```
+
+---
+
+### 8.3 Remove a card
+
+```typescript
+removeCustomerCard(skyflowId: string): Promise<string>
+// skyflowId = card.fields.skyflow_id from getCustomerCards()
+```
+
+```typescript
+await this.liteCheckout.removeCustomerCard(card.fields.skyflow_id);
+// Refresh the card list after removal
+const { cards } = await this.liteCheckout.getCustomerCards();
+```
+
+---
+
+### 8.4 Card On File (`subscription_id`)
+
+Card On File is a feature that Tonder activates on your merchant account. When active, saved cards receive a `subscription_id` — these cards do **not** require CVV entry on subsequent payments.
+
+**Conditional CVV rule:**
+
+| `subscription_id` present | CVV required? | Action |
+|--------------------------|--------------|--------|
+| Yes | No | Call `payment()` directly with `card: skyflow_id` |
+| No | Yes | Mount CVV with `mountCardFields({ fields: ['cvv'], card_id })` first |
+
+```typescript
+const selectedCard = cards.find(c => c.fields.skyflow_id === selectedId);
+
+if (!selectedCard.fields.subscription_id) {
+  // Need CVV — mount the field
+  await this.liteCheckout.mountCardFields({
+    fields: ['cvv'],
+    card_id: selectedCard.fields.skyflow_id,
+  });
+}
+
+// Then pay
+await this.liteCheckout.payment({
+  ...customerCartData,
+  card: selectedCard.fields.skyflow_id,
+});
+```
+
+**Legacy cards without `subscription_id`**
+
+Cards saved before Card On File was enabled may not have `subscription_id`. You have three options:
+
+1. Remove the card with `removeCustomerCard()` and let the user re-enroll.
+2. Run a full new-card payment flow — the SDK creates a subscription and updates the card. Note: this may generate a new `skyflow_id`; update any stored references in your app.
+3. Contact Tonder support to migrate specific cards.
+
+---
+
+## 9. Revealing Card Data — `revealCardFields`
+
+After a successful `saveCustomerCard()` or `payment()` with a **new card**, use `revealCardFields()` to display the card data in your UI through secure iframes — raw card values are never exposed to your application.
+
+> **When to call:** Only after a successful `saveCustomerCard()` or new-card `payment()`. Calling it without a prior successful card operation throws `MOUNT_COLLECT_ERROR`.
+
+**Default container IDs and fixed redaction:**
+
+| Field | Default Container ID | Redaction Applied |
+|-------|---------------------|-------------------|
+| `card_number` | `#reveal_card_number` | `MASKED` — e.g. `4111 11•• •••• 1234` |
+| `cardholder_name` | `#reveal_cardholder_name` | `PLAIN_TEXT` |
+| `expiration_month` | `#reveal_expiration_month` | `PLAIN_TEXT` |
+| `expiration_year` | `#reveal_expiration_year` | `PLAIN_TEXT` |
+
+> **PCI note:** `cvv` cannot be revealed — PCI DSS Requirement 3.2.1 prohibits storing or displaying CVV post-authorization. Redaction levels are fixed by the SDK and **cannot be overridden**.
+
+> **Note:** Reveal elements only support `base`, `copyIcon`, and `global` style variants (unlike Collect elements which also support `focus`, `complete`, `invalid`, etc.).
+
+**Types:**
+
+```typescript
+type RevealableCardField = 'card_number' | 'cardholder_name' | 'expiration_month' | 'expiration_year';
+
+interface IRevealCardFieldsRequest {
+  fields: (RevealableCardField | IRevealCardField)[];
+  styles?: IRevealElementStyles;  // Applied to all fields unless overridden per-field
+}
+
+interface IRevealCardField {
+  field: RevealableCardField;
+  container_id?: string;          // default: #reveal_<field>
+  altText?: string;               // Placeholder text shown before reveal() resolves
+  label?: string;                 // Label rendered above the field
+  styles?: IRevealElementStyles;  // Per-field override; takes priority over request.styles
+}
+
+interface IRevealElementStyles {
+  inputStyles?: {
+    base?: Record<string, any>;
+    copyIcon?: Record<string, any>;
+    global?: Record<string, any>;
+  };
+  labelStyles?: { base?: Record<string, any>; global?: Record<string, any> };
+  errorTextStyles?: { base?: Record<string, any>; global?: Record<string, any> };
+}
+```
+
+**Example 1 — Basic (shorthand):**
+
+```html
+<div id="reveal_cardholder_name"></div>
+<div id="reveal_card_number"></div>
+<div id="reveal_expiration_month"></div>
+<div id="reveal_expiration_year"></div>
+```
+
+```typescript
+await this.liteCheckout.saveCustomerCard();
+
+// Reveal immediately after saving
+await this.liteCheckout.revealCardFields({
+  fields: ['cardholder_name', 'card_number', 'expiration_month', 'expiration_year'],
+});
+// #reveal_card_number shows "4111 11•• •••• 1234"
+// #reveal_cardholder_name shows "John Doe"
+```
+
+**Example 2 — With `altText` and `label` per field:**
+
+```typescript
+await this.liteCheckout.revealCardFields({
+  fields: [
+    { field: 'card_number', altText: '•••• •••• •••• ••••', label: 'Card Number' },
+    { field: 'cardholder_name', altText: 'Loading…', label: 'Cardholder' },
+    { field: 'expiration_month', label: 'Month' },
+    { field: 'expiration_year', label: 'Year' },
+  ],
+});
+```
+
+**Example 3 — Custom styles:**
+
+```typescript
+await this.liteCheckout.revealCardFields({
+  fields: ['card_number', 'cardholder_name', 'expiration_month', 'expiration_year'],
+  styles: {
+    inputStyles: {
+      base: {
+        color: '#ffffff',
+        fontFamily: '"Courier New", monospace',
+        fontSize: '16px',
+        background: 'transparent',
+        letterSpacing: '2px',
+      },
+    },
+  },
+});
+```
+
+**Example 4 — Custom container IDs:**
+
+```typescript
+await this.liteCheckout.revealCardFields({
+  fields: [
+    { field: 'card_number', container_id: '#my-card-display' },
+    { field: 'cardholder_name', container_id: '#my-name-display' },
+  ],
+});
+```
+
+---
+
+## 10. Error Handling
+
+### 10.1 Error structure
+
+When a public SDK method fails, it throws an `AppError` instance with the following shape:
+
+```json
+{
+  "name": "TonderError",
+  "status": "error",
+  "code": "PAYMENT_PROCESS_ERROR",
+  "message": "There was an issue processing the payment.",
+  "statusCode": 500,
+  "details": { ... }
+}
+```
+
+**Notes:**
+- `statusCode` reflects the HTTP status when available; defaults to `500` for non-HTTP errors.
+- `details` contains additional context about the error when available.
+
+**TypeScript catch pattern:**
+
+```typescript
+import { AppError } from '@tonder.io/ionic-lite-sdk';
+
+try {
+  const response = await this.liteCheckout.payment(data);
+} catch (error) {
+  if (error instanceof AppError) {
+    console.error(`[${error.code}] ${error.message} (HTTP ${error.statusCode})`);
+    // Use error.code to show a user-friendly message
+  }
+}
+```
+
+---
+
+### 10.2 Error code reference
+
+| Code | Thrown by | When |
+|------|-----------|------|
+| `PAYMENT_PROCESS_ERROR` | `payment()` | Any payment failure |
+| `CARD_ON_FILE_DECLINED` | `payment()`, `saveCustomerCard()` | Card On File authorization declined (only when Card On File is active on your account) |
+| `MOUNT_COLLECT_ERROR` | `mountCardFields()`, `revealCardFields()` | Secure fields fail to mount, or `revealCardFields()` called without a prior successful card operation |
+| `SAVE_CARD_ERROR` | `saveCustomerCard()` | Any error during card save |
+| `FETCH_CARDS_ERROR` | `getCustomerCards()` | Request to fetch saved cards fails |
+| `REMOVE_CARD_ERROR` | `removeCustomerCard()` | Request to remove a card fails |
+| `FETCH_PAYMENT_METHODS_ERROR` | `getCustomerPaymentMethods()` | Request to fetch APMs fails |
+
+---
+
+## 11. Customization & Styling
+
+### 11.1 Global form styles
+
+Apply styles to all card input fields at once via `customization.styles.cardForm`. Per-field overrides (Section 11.2) take priority.
+
+`cardForm` uses wrapper keys (`inputStyles`, `labelStyles`, `errorStyles`) defined by `ILiteCardFormStyles`. Per-field keys like `cardholderName`, `cardNumber`, `cvv`, etc. are directly `CollectInputStylesVariant` — no wrapper.
+
+```typescript
+new LiteCheckout({
+  apiKey: 'YOUR_KEY',
+  mode: 'production',
+  returnUrl: 'https://myapp.com/checkout',
+  customization: {
+    styles: {
+      // Show card brand icon inside the card_number field (default: true)
+      enableCardIcon: true,
+
+      cardForm: {
+        // Base typography applied to all fields
+        base: {
+          fontFamily: 'Inter, sans-serif',
+          fontSize: '14px',
+          color: '#1d1d1f',
+        },
+        // Styles applied to the <input> element inside each iframe
+        inputStyles: {
+          base: {
+            border: '1px solid #d1d1d6',
+            borderRadius: '8px',
+            padding: '10px 12px',
+            backgroundColor: '#ffffff',
+          },
+          focus: {
+            borderColor: '#6200ee',
+            boxShadow: '0 0 0 3px rgba(98, 0, 238, 0.15)',
+            outline: 'none',
+          },
+          complete: {
+            borderColor: '#34c759',
+          },
+          invalid: {
+            borderColor: '#ff3b30',
+            color: '#ff3b30',
+          },
+          empty: {
+            borderColor: '#d1d1d6',
+          },
+        },
+        // Styles applied to the field label
+        labelStyles: {
+          base: {
+            fontSize: '12px',
+            fontWeight: '500',
+            color: '#6e6e73',
+            marginBottom: '4px',
+          },
+        },
+        // Styles applied to the validation error message
+        errorStyles: {
+          base: {
+            color: '#ff3b30',
+            fontSize: '11px',
+            marginTop: '4px',
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+---
+
+### 11.2 Per-field styles
+
+Override styles for individual fields using the field keys in `IStyles`. These take priority over `cardForm` styles.
+
+> **Key difference from `cardForm`:** Per-field keys are directly `CollectInputStylesVariant` — variants like `base`, `focus`, `invalid` go at the top level. There is **no** `inputStyles` wrapper.
+
+**Available style variants for `CollectInputStylesVariant`:**
+
+```typescript
+interface CollectInputStylesVariant {
+  base?: Record<string, any>;           // Default state
+  focus?: Record<string, any>;          // When field has focus
+  complete?: Record<string, any>;       // When field has a valid value
+  invalid?: Record<string, any>;        // When value fails validation
+  empty?: Record<string, any>;          // When field is empty (unfocused)
+  cardIcon?: Record<string, any>;       // Card brand icon (card_number only)
+  dropdownIcon?: Record<string, any>;   // Dropdown arrow icon
+  dropdown?: Record<string, any>;       // Dropdown container
+  dropdownListItem?: Record<string, any>; // Each dropdown option
+  global?: Record<string, any>;         // Applied to the iframe root element
+}
+```
+
+**Per-field keys in `IStyles`:**
+
+| Key | Field |
+|-----|-------|
+| `cardholderName` | Cardholder name field |
+| `cardNumber` | Card number field |
+| `cvv` | CVV field |
+| `expirationMonth` | Expiration month field |
+| `expirationYear` | Expiration year field |
+
+**Example — highlight CVV with a different color scheme:**
+
+```typescript
+customization: {
+  styles: {
+    cvv: {
+      base: { borderColor: '#8e44ad', backgroundColor: '#faf5ff' },
+      focus: { borderColor: '#6c3483', boxShadow: '0 0 0 3px rgba(108,52,131,0.2)' },
+      invalid: { borderColor: '#e74c3c', color: '#e74c3c' },
+      complete: { borderColor: '#27ae60' },
+    },
+  },
+}
+```
+
+**Example — full per-field override:**
+
+```typescript
+customization: {
+  styles: {
+    cardNumber: {
+      base: { letterSpacing: '2px', fontFamily: '"Courier New", monospace' },
+      cardIcon: { width: '32px', height: '20px' },
+    },
+    expirationMonth: {
+      base: { textAlign: 'center' },
+    },
+    expirationYear: {
+      base: { textAlign: 'center' },
+    },
+  },
+}
+```
+
+---
+
+### 11.3 Labels & placeholders
+
+```typescript
+interface IFormLabels {
+  name?: string;              // Label for cardholder name field
+  card_number?: string;       // Label for card number field
+  cvv?: string;               // Label for CVV field
+  expiry_date?: string;       // Shared expiry label (if shown as one field)
+  expiration_month?: string;  // Label for expiration month field
+  expiration_year?: string;   // Label for expiration year field
+}
+
+interface IFormPlaceholder {
+  name?: string;              // Placeholder for cardholder name
+  card_number?: string;       // Placeholder for card number
+  cvv?: string;               // Placeholder for CVV
+  expiration_month?: string;  // Placeholder for expiration month
+  expiration_year?: string;   // Placeholder for expiration year
+}
+```
+
+**Example:**
+
+```typescript
+customization: {
+  labels: {
+    name: 'Cardholder Name',
+    card_number: 'Card Number',
+    cvv: 'Security Code (CVV)',
+    expiration_month: 'Month',
+    expiration_year: 'Year',
+  },
+  placeholders: {
+    name: 'John Doe',
+    card_number: '4111 1111 1111 1111',
+    cvv: '•••',
+    expiration_month: 'MM',
+    expiration_year: 'YY',
+  },
+}
+```
+
+---
+
+## 12. Deprecated API
+
+<details>
+<summary>Deprecated API — click to expand</summary>
+
+### Deprecated constructor properties
+
+| Property | Replacement | Notes |
+|----------|-------------|-------|
+| `apiKeyTonder` | `apiKey` | Renamed for clarity |
+| `baseUrlTonder` | `mode` | Replaced by environment enum (`'stage'` \| `'production'` \| ...) |
+| `signal` | (removed) | AbortController signal is no longer needed |
+
+### Deprecated methods
+
+| Deprecated Method | Use Instead | Notes |
+|------------------|-------------|-------|
+| `getBusiness()` | (auto-handled) | No longer needed |
+| `customerRegister(email)` | (auto-handled) | No longer needed |
+| `createOrder(items)` | `payment()` | Replaced by unified `payment()` |
+| `createPayment(items)` | `payment()` | Replaced by unified `payment()` |
+| `startCheckoutRouter(data)` | `payment()` | Replaced by unified `payment()` |
+| `startCheckoutRouterFull(data)` | `payment()` | Replaced by unified `payment()` |
+| `registerCustomerCard(secureToken, customerToken, data)` | `saveCustomerCard()` | Signature changed; call `mountCardFields()` first |
+| `deleteCustomerCard(customerToken, skyflowId)` | `removeCustomerCard(skyflowId)` | Signature simplified |
+| `getActiveAPMs()` | `getCustomerPaymentMethods()` | Renamed |
+| `getSkyflowTokens(...)` | (auto-handled) | No longer needed |
+| `getOpenpayDeviceSessionID(...)` | (auto-handled) | No longer needed |
+
+### Deprecated data patterns
+
+**Raw card fields in `payment()` / `saveCustomerCard()`**
+
+Passing raw card values (card number, CVV, etc.) directly to these methods is no longer supported. Card data must be collected via `mountCardFields()` first:
+
+```typescript
+// ❌ Deprecated
+await liteCheckout.payment({ ..., card: { card_number: '4111...', cvv: '123', ... } });
+
+// ✅ Current
+await liteCheckout.mountCardFields({ fields: ['cardholder_name', 'card_number', 'expiration_month', 'expiration_year', 'cvv'] });
+// user fills in the form
+await liteCheckout.payment({ customer, cart, currency });
+```
+
+**`returnUrl` in `IProcessPaymentRequest`**
+
+Set `returnUrl` on the constructor instead of per-payment:
+
+```typescript
+// ❌ Deprecated
+await liteCheckout.payment({ ..., returnUrl: 'https://myapp.com/done' });
+
+// ✅ Current — set on constructor
+new LiteCheckout({ apiKey, mode, returnUrl: 'https://myapp.com/done' });
+```
+
+</details>
+

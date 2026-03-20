@@ -1,13 +1,15 @@
 import Skyflow from "skyflow-js";
 import CollectContainer from "skyflow-js/types/core/external/collect/collect-container";
 import CollectElement from "skyflow-js/types/core/external/collect/collect-element";
+import RevealContainer from "skyflow-js/types/core/external/reveal/reveal-container";
 import { getVaultToken } from "../data/skyflowApi";
 import { TokensSkyflowRequest } from "../types/requests";
-import { CardFieldEnum, IMountCardFieldsRequest } from "../types/card";
+import { CardFieldEnum, IMountCardFieldsRequest, IRevealCardField, IRevealCardFieldsRequest } from "../types/card";
 import {
   IEvents,
   IInputEvents,
   ILiteCustomizationOptions,
+  IStyles,
   StylesBaseVariant,
 } from "../types/commons";
 import {
@@ -26,9 +28,8 @@ import { buildPublicAppError } from "../shared/utils/appError";
 import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
 
 /**
- * [DEPRECATION WARNING]
- * This function should be deprecated in favor of using mountSkyflowFields for security,
- * to prevent users from creating their own inputs.
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Use `mountCardFields()` to render Skyflow Elements and collect card data securely.
  */
 export async function getSkyflowTokens({
   baseUrl,
@@ -135,14 +136,16 @@ export async function initSkyflowInstance({
   apiKey,
   vault_id,
   vault_url,
+  mode,
 }: TokensSkyflowRequest): Promise<Skyflow> {
+  const skyflowEnv = mode === 'production' ? Skyflow.Env.PROD : Skyflow.Env.DEV;
   return Skyflow.init({
     vaultID: vault_id,
     vaultURL: vault_url,
     getBearerToken: async () => await getVaultToken(baseUrl, apiKey),
     options: {
       logLevel: Skyflow.LogLevel.ERROR,
-      env: Skyflow.Env.DEV,
+      env: skyflowEnv,
     },
   });
 }
@@ -176,19 +179,42 @@ export async function mountSkyflowFields(event: {
     [CardFieldEnum.EXPIRATION_YEAR]: [regexMatchRule],
     [CardFieldEnum.CARDHOLDER_NAME]: [lengthMatchRule, regexMatchRule],
   };
-  const customStyles = {
-    errorStyles:
-      customization?.styles?.cardForm?.errorStyles ||
-      DEFAULT_SKYFLOW_ERROR_TEXT_STYLES,
-    inputStyles:
-      customization?.styles?.cardForm?.inputStyles ||
-      DEFAULT_SKYFLOW_INPUT_STYLES,
-    labelStyles:
-      customization?.styles?.cardForm?.labelStyles ||
-      DEFAULT_SKYFLOW_lABEL_STYLES,
+  const fieldToStyleKey: Record<CardFieldEnum, keyof Omit<IStyles, 'cardForm' | 'enableCardIcon'>> = {
+    [CardFieldEnum.CARDHOLDER_NAME]: 'cardholderName',
+    [CardFieldEnum.CARD_NUMBER]: 'cardNumber',
+    [CardFieldEnum.CVV]: 'cvv',
+    [CardFieldEnum.EXPIRATION_MONTH]: 'expirationMonth',
+    [CardFieldEnum.EXPIRATION_YEAR]: 'expirationYear',
   };
+
+  const getFieldStyles = (field: CardFieldEnum) => {
+    const perFieldInputStyles = customization?.styles?.[fieldToStyleKey[field]];
+    const form = customization?.styles?.cardForm;
+    const resolvedInputStyles = perFieldInputStyles ?? form?.inputStyles ?? DEFAULT_SKYFLOW_INPUT_STYLES;
+
+    // For card_number: inject paddingLeft default so text doesn't overlap the card-network icon.
+    // Applied only when the icon is visible (enableCardIcon !== false) and the developer
+    // hasn't already set paddingLeft in their base styles.
+    const iconVisible = field === CardFieldEnum.CARD_NUMBER && customization?.styles?.enableCardIcon !== false;
+    const inputStyles = iconVisible
+      ? {
+          ...resolvedInputStyles,
+          base: {
+            paddingLeft: '15px',             // default — gives room for the card icon
+            ...(resolvedInputStyles as any)?.base, // developer's base overrides, including their own paddingLeft
+          },
+        }
+      : resolvedInputStyles;
+
+    return {
+      inputStyles,
+      labelStyles: form?.labelStyles ?? DEFAULT_SKYFLOW_lABEL_STYLES,
+      errorStyles: form?.errorStyles ?? DEFAULT_SKYFLOW_ERROR_TEXT_STYLES,
+    };
+  };
+
   const labels: Record<string, string> = {
-    name: customization?.labels?.name || DEFAULT_SKYFLOW_lABELS.name,
+    cardholder_name: customization?.labels?.name || DEFAULT_SKYFLOW_lABELS.name,
     card_number:
       customization?.labels?.card_number || DEFAULT_SKYFLOW_lABELS.card_number,
     cvv: customization?.labels?.cvv || DEFAULT_SKYFLOW_lABELS.cvv,
@@ -203,7 +229,7 @@ export async function mountSkyflowFields(event: {
       DEFAULT_SKYFLOW_lABELS.expiration_year,
   };
   const placeholders: Record<string, string> = {
-    name:
+    cardholder_name:
       customization?.placeholders?.name || DEFAULT_SKYFLOW_PLACEHOLDERS.name,
     card_number:
       customization?.placeholders?.card_number ||
@@ -225,21 +251,26 @@ export async function mountSkyflowFields(event: {
   };
 
   if ("fields" in data && Array.isArray(data.fields)) {
+    const cardIconOption = { enableCardIcon: customization?.styles?.enableCardIcon ?? true };
+
     if (data.fields.length > 0 && typeof data.fields[0] === "string") {
       for (const field of data.fields as CardFieldEnum[]) {
-        const element = collectContainer.create({
-          table: "cards",
-          column: field,
-          type: typeByField[field],
-          validations: validationsByField[field],
-          ...customStyles,
-          label: labels[field],
-          placeholder: placeholders[field],
-          ...(data.card_id ? { skyflowID: data.card_id } : {}),
-        });
+        const element = collectContainer.create(
+          {
+            table: "cards",
+            column: field,
+            type: typeByField[field],
+            validations: validationsByField[field],
+            ...getFieldStyles(field),
+            label: labels[field],
+            placeholder: placeholders[field],
+            ...(data.card_id ? { skyflowID: data.card_id } : {}),
+          },
+          field === CardFieldEnum.CARD_NUMBER ? cardIconOption : undefined,
+        );
         handleSkyflowElementEvents({
           element,
-          errorStyles: customStyles.errorStyles,
+          errorStyles: getFieldStyles(field).errorStyles,
           fieldMessage: [
             CardFieldEnum.CVV,
             CardFieldEnum.EXPIRATION_MONTH,
@@ -261,16 +292,19 @@ export async function mountSkyflowFields(event: {
         field: CardFieldEnum;
       }[]) {
         const key = fieldObj.field;
-        const element = collectContainer.create({
-          table: "cards",
-          column: key,
-          type: typeByField[key],
-          validations: validationsByField[key],
-          ...customStyles,
-          label: labels[key],
-          placeholder: placeholders[key],
-          ...(data.card_id ? { skyflowID: data.card_id } : {}),
-        });
+        const element = collectContainer.create(
+          {
+            table: "cards",
+            column: key,
+            type: typeByField[key],
+            validations: validationsByField[key],
+            ...getFieldStyles(key),
+            label: labels[key],
+            placeholder: placeholders[key],
+            ...(data.card_id ? { skyflowID: data.card_id } : {}),
+          },
+          key === CardFieldEnum.CARD_NUMBER ? cardIconOption : undefined,
+        );
         const containerId =
           fieldObj.container_id ||
           `#collect_${String(key)}` + (data.card_id ? `_${data.card_id}` : "");
@@ -371,13 +405,82 @@ const executeEvent = (event: {
     if (typeof eventHandler === "function") {
       eventHandler({
         elementType: get(data, "elementType", ""),
-        isEmpty: get(data, "isEmpty", ""),
-        isFocused: get(data, "isFocused", ""),
-        isValid: get(data, "isValid", ""),
+        isEmpty: get(data, "isEmpty", false),
+        isFocused: get(data, "isFocused", false),
+        isValid: get(data, "isValid", false),
+        value: get(data, "value", ""),
       });
     }
   }
 };
+
+export async function mountRevealFields(event: {
+  skyflowInstance: Skyflow;
+  tokens: Record<string, string>;
+  request: IRevealCardFieldsRequest;
+}): Promise<void> {
+  const { skyflowInstance, tokens, request } = event;
+  const revealContainer = skyflowInstance.container(
+    Skyflow.ContainerType.REVEAL,
+  ) as RevealContainer;
+
+  // Redaction levels are fixed per PCI DSS — not configurable by the caller.
+  // CVV (PCI DSS req. 3.2.1) must never be revealed after authorisation.
+  const pciRedaction: Partial<Record<CardFieldEnum, string>> = {
+    [CardFieldEnum.CARD_NUMBER]:      'MASKED',      // first-6 / last-4 only
+    [CardFieldEnum.CARDHOLDER_NAME]:  'PLAIN_TEXT',
+    [CardFieldEnum.EXPIRATION_MONTH]: 'PLAIN_TEXT',
+    [CardFieldEnum.EXPIRATION_YEAR]:  'PLAIN_TEXT',
+  };
+
+  for (const entry of request.fields) {
+    const isString = typeof entry === 'string';
+    const field = (isString ? entry : (entry as IRevealCardField).field) as CardFieldEnum;
+
+    // CVV must never be revealed — skip silently with a warning.
+    if (field === CardFieldEnum.CVV) {
+      console.warn('[revealCardFields] CVV cannot be revealed (PCI DSS req. 3.2.1). Skipping.');
+      continue;
+    }
+
+    const token = tokens[field];
+    if (!token) {
+      console.warn(`[revealCardFields] No token found for field "${field}", skipping.`);
+      continue;
+    }
+
+    const cfg: Partial<IRevealCardField> = isString ? {} : (entry as IRevealCardField);
+    const containerId = cfg.container_id ?? `#reveal_${field}`;
+    const redactionKey = pciRedaction[field]!;
+    const fieldStyles = cfg.styles ?? {};
+    const globalStyles = request.styles ?? {};
+
+    const element = revealContainer.create({
+      token,
+      redaction: Skyflow.RedactionType[redactionKey as keyof typeof Skyflow.RedactionType], // fixed by SDK
+      ...(cfg.altText !== undefined && { altText: cfg.altText }),
+      ...(cfg.label !== undefined && { label: cfg.label }),
+      ...(fieldStyles.inputStyles || globalStyles.inputStyles
+        ? { inputStyles: fieldStyles.inputStyles ?? globalStyles.inputStyles }
+        : {}),
+      ...(fieldStyles.labelStyles || globalStyles.labelStyles
+        ? { labelStyles: fieldStyles.labelStyles ?? globalStyles.labelStyles }
+        : {}),
+      ...(fieldStyles.errorTextStyles || globalStyles.errorTextStyles
+        ? { errorTextStyles: fieldStyles.errorTextStyles ?? globalStyles.errorTextStyles }
+        : {}),
+    });
+
+    await tryMountElement({ element, containerId });
+  }
+
+  try {
+    await (revealContainer as any).reveal();
+  } catch (e) {
+    // reveal() returns partial success/error — not critical to throw
+    console.warn('[revealCardFields] reveal completed with errors:', e);
+  }
+}
 
 async function tryMountElement(event: {
   element: any;
