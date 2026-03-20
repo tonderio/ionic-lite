@@ -217,16 +217,16 @@ export interface IFormPlaceholder {
 
 export interface IStyles {
   cardForm?: ILiteCardFormStyles;
-  /** Input-element styles applied only to the cardholder name field. Overrides `cardForm.inputStyles` for this field. */
-  cardholderName?: CollectInputStylesVariant;
-  /** Input-element styles applied only to the card number field. Overrides `cardForm.inputStyles` for this field. */
-  cardNumber?: CollectInputStylesVariant;
-  /** Input-element styles applied only to the CVV field. Overrides `cardForm.inputStyles` for this field. */
-  cvv?: CollectInputStylesVariant;
-  /** Input-element styles applied only to the expiration month field. Overrides `cardForm.inputStyles` for this field. */
-  expirationMonth?: CollectInputStylesVariant;
-  /** Input-element styles applied only to the expiration year field. Overrides `cardForm.inputStyles` for this field. */
-  expirationYear?: CollectInputStylesVariant;
+  /** Styles applied only to the cardholder name field. Overrides `cardForm` styles for this field. Same structure as `cardForm` — use `inputStyles`, `labelStyles`, and `errorStyles`. */
+  cardholderName?: ILiteCardFormStyles;
+  /** Styles applied only to the card number field. Overrides `cardForm` styles for this field. Same structure as `cardForm` — use `inputStyles`, `labelStyles`, and `errorStyles`. */
+  cardNumber?: ILiteCardFormStyles;
+  /** Styles applied only to the CVV field. Overrides `cardForm` styles for this field. Same structure as `cardForm` — use `inputStyles`, `labelStyles`, and `errorStyles`. */
+  cvv?: ILiteCardFormStyles;
+  /** Styles applied only to the expiration month field. Overrides `cardForm` styles for this field. Same structure as `cardForm` — use `inputStyles`, `labelStyles`, and `errorStyles`. */
+  expirationMonth?: ILiteCardFormStyles;
+  /** Styles applied only to the expiration year field. Overrides `cardForm` styles for this field. Same structure as `cardForm` — use `inputStyles`, `labelStyles`, and `errorStyles`. */
+  expirationYear?: ILiteCardFormStyles;
   /**
    * Show the card-network icon inside the card number Skyflow Element.
    * Corresponds to Skyflow's `CollectElementOptions.enableCardIcon`.
