@@ -18,7 +18,7 @@ Card data is collected through **Skyflow secure iframes** — raw card values ne
    - [5.3 Unmounting fields](#53-unmounting-fields)
 6. [Processing Payments](#6-processing-payments)
    - [6.1 New card payment](#61-new-card-payment)
-   - [6.2 Saved card payment](#62-saved-card-payment)
+   - [6.2 Pay with a saved card](#62-pay-with-a-saved-card)
    - [6.3 Alternative Payment Method (APM)](#63-alternative-payment-method-apm)
    - [6.4 Payment response reference](#64-payment-response-reference)
 7. [3DS Handling](#7-3ds-handling)
@@ -256,7 +256,7 @@ interface IEventSecureInput {
 }
 ```
 
-> **PCI note:** In `production`, all fields return `value: ''` except `card_number`, which returns a masked value (first digits only). In `stage`, `development`, and `sandbox`, `value` is fully populated for all fields. Use `isValid` and `isEmpty` for UI state logic — never depend on `value` in production.
+> **PCI note:** In `production`, `card_number` returns a **partially masked** value (first 8 digits for non-AMEX, first 6 for AMEX, rest masked). All other fields — including `cvv` — return `value: ''`. In `stage`, `development`, and `sandbox`, all fields return the actual value. Use `isValid` and `isEmpty` for UI state logic — never depend on `value` for business logic in production.
 
 **Example — live card form validation:**
 
@@ -627,7 +627,7 @@ async pay() {
 
 ---
 
-### 6.2 Saved card payment
+### 6.2 Pay with a saved card
 
 **Prerequisites:** Fetch saved cards ([Section 8.1](#81-list-saved-cards)). Conditionally mount the CVV field ([Section 5.2](#52-saved-card-cvv-only)).
 
@@ -1280,8 +1280,6 @@ customization: {
 | `registerCustomerCard(secureToken, customerToken, data)` | `saveCustomerCard()` | Signature changed; call `mountCardFields()` first |
 | `deleteCustomerCard(customerToken, skyflowId)` | `removeCustomerCard(skyflowId)` | Signature simplified |
 | `getActiveAPMs()` | `getCustomerPaymentMethods()` | Renamed |
-| `getSkyflowTokens(...)` | (auto-handled) | No longer needed |
-| `getOpenpayDeviceSessionID(...)` | (auto-handled) | No longer needed |
 
 ### Deprecated data patterns
 
