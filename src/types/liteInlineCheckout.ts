@@ -1,7 +1,7 @@
 import { IConfigureCheckout } from "./commons";
 import {
   ICustomerCardsResponse,
-  ISaveCardRequest,
+  IRevealCardFieldsRequest,
   ISaveCardResponse,
 } from "./card";
 import { IPaymentMethod } from "./paymentMethod";
@@ -76,16 +76,19 @@ export interface ILiteCheckout {
   getCustomerCards(): Promise<ICustomerCardsResponse>;
 
   /**
-   * Saves a card to a customer's account. This method can be used to add a new card
-   * or update an existing one.
-   * @param {import("./index").ISaveCardRequest} card - The card information to be saved.
+   * Saves a card to a customer's account using card data collected via Skyflow Elements.
+   *
+   * **Requires** that `mountCardFields()` was called first with all five fields
+   * (`cardholder_name`, `card_number`, `expiration_month`, `expiration_year`, `cvv`)
+   * and that the user has filled them in before calling this method.
+   *
    * @returns {Promise<import("./index").ISaveCardResponse>} A promise that resolves with the saved card data.
    *
    * @throws {import("./index").IPublicError} Throws an error object if the operation fails.
    *
    * @public
    */
-  saveCustomerCard(card: ISaveCardRequest): Promise<ISaveCardResponse>;
+  saveCustomerCard(): Promise<ISaveCardResponse>;
 
   /**
    * Removes a card from a customer's account.
@@ -224,9 +227,18 @@ export interface ILiteCheckout {
   ): Promise<string | ErrorResponse>;
 
   /**
-   * Displays and renders card input fields in the checkout.
-   * Uses the provided configuration to show the required fields in the payment form.
-   * @param {import("./card").IMountCardFieldsRequest} event - Configuration for the card fields to render.
+   * Mounts Skyflow Elements (secure iframes) into developer-provided `<div>` containers.
+   *
+   * **New card form** (omit `card_id`): mount all 5 fields before calling `payment()` or
+   * `saveCustomerCard()`. Place divs with default IDs: `collect_cardholder_name`,
+   * `collect_card_number`, `collect_expiration_month`, `collect_expiration_year`, `collect_cvv`.
+   *
+   * **Saved-card CVV** (provide `card_id`): mount only `cvv` for a specific saved card before
+   * calling `payment()`. Default div ID: `collect_cvv_<card_id>`.
+   *
+   * Custom container IDs can be set via `{ field, container_id }` object form per field entry.
+   *
+   * @param {import("./card").IMountCardFieldsRequest} event - Configuration for the fields to render.
    * @returns {Promise<void>} Resolves when the fields have been successfully rendered.
    * @public
    */
@@ -239,4 +251,34 @@ export interface ILiteCheckout {
    * @public
    */
   unmountCardFields(context?: string): void;
+
+  /**
+   * Reveals card data (from the last `saveCustomerCard()` or `payment()` with a new card)
+   * in developer-provided `<div>` containers using Skyflow Reveal Elements (secure iframes).
+   *
+   * Must be called **after** a successful `saveCustomerCard()` or `payment()` that processed
+   * a new card. The SDK stores the Skyflow tokens from that collect operation internally.
+   *
+   * **Default container IDs:** `#reveal_<field>` (e.g. `#reveal_card_number`).
+   *
+   * **Redaction by field (fixed, cannot be overridden):**
+   * - `card_number` → `MASKED` (e.g. `4111 11•• •••• 1234`)
+   * - `cardholder_name`, `expiration_month`, `expiration_year` → `PLAIN_TEXT`
+   *
+   * > CVV cannot be revealed — PCI DSS 3.2.1 prohibits storing or displaying CVV post-authorization.
+   *
+   * @param request - Fields to reveal, plus optional styles, redaction level, and altText per field.
+   * @returns {Promise<void>} Resolves when all Reveal Elements have been mounted and `reveal()` called.
+   * @public
+   *
+   * @example
+   * ```typescript
+   * // After successful saveCustomerCard():
+   * await liteCheckout.revealCardFields({
+   *   fields: ['card_number', 'cardholder_name', 'expiration_month', 'expiration_year']
+   * });
+   * // → renders masked card info in #reveal_card_number, #reveal_cardholder_name, etc.
+   * ```
+   */
+  revealCardFields(request: IRevealCardFieldsRequest): Promise<void>;
 }
