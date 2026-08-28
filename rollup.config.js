@@ -23,5 +23,5 @@ module.exports = {
       exclude: ["tests/**", "jest.config.ts"]
     })
   ],
-  external: ["skyflow-js", "crypto-js"]
+  external: ["skyflow-js", "crypto-js", "lodash"]
 };

@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "lodash": "^4.18.0",
     "lodash.get": "^4.4.2",
     "skyflow-js": "2.5.0",
     "ts-node": "^10.9.2"
