@@ -23,7 +23,7 @@ import {
   DEFAULT_SKYFLOW_INPUT_STYLES,
   DEFAULT_SKYFLOW_lABEL_STYLES,
 } from "../shared/styles/skyflow.styles";
-import { get } from "lodash";
+import { get } from "./get";
 import { buildPublicAppError } from "../shared/utils/appError";
 import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
 

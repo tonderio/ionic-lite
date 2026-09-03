@@ -12,7 +12,7 @@ import {
   getBrowserInfo
 } from "../helpers/utils";
 import { registerOrFetchCustomer } from "../data/customerApi";
-import { get } from "lodash";
+import { get } from "../helpers/get";
 import {
   fetchCustomerCards,
   removeCustomerCard,
