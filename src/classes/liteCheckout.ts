@@ -102,7 +102,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
                   ...ic.fields,
                   subscription_id: this._hasCardOnFileKeys() ? ic.fields.subscription_id : undefined,
               },
-              icon: getCardType(ic.fields.card_scheme),
+              icon: getCardType(ic.fields.card_scheme, this.mode),
           })),
       };
     } catch (error) {
@@ -254,7 +254,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
             payment_method: apmItem.payment_method,
             priority: apmItem.priority,
             category: apmItem.category,
-            ...getPaymentMethodDetails(apmItem.payment_method),
+            ...getPaymentMethodDetails(apmItem.payment_method, this.mode),
           };
           return apm;
         })
@@ -1076,7 +1076,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
             payment_method: apmItem.payment_method,
             priority: apmItem.priority,
             category: apmItem.category,
-            ...getPaymentMethodDetails(apmItem.payment_method),
+            ...getPaymentMethodDetails(apmItem.payment_method, this.mode),
           };
           return apm;
         })

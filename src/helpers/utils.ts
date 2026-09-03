@@ -1,3 +1,5 @@
+import { getAssetBaseUrl } from "../shared/constants/assetUrl";
+
 export const getBrowserInfo = () => {
   const browserInfo = {
     javascript_enabled: true, // Assumed since JavaScript is running
@@ -25,18 +27,22 @@ const clearSpace = (text: string) => {
   return text.trim().replace(/\s+/g, "");
 };
 
-const getCardType = (scheme: string) => {
+const getCardType = (
+  scheme: string,
+  mode: "production" | "sandbox" | "stage" | "development" = "stage",
+) => {
+  const assetBaseUrl = getAssetBaseUrl(mode);
   if (scheme === "Visa") {
     // Check if visa
-    return "https://d35a75syrgujp0.cloudfront.net/cards/visa.png";
+    return `${assetBaseUrl}/cards/visa.png`;
   } else if (scheme === "Mastercard") {
     // Check if master
-    return "https://d35a75syrgujp0.cloudfront.net/cards/mastercard.png";
+    return `${assetBaseUrl}/cards/mastercard.png`;
   } else if (scheme === "American Express") {
     // Check if amex
-    return "https://d35a75syrgujp0.cloudfront.net/cards/american_express.png";
+    return `${assetBaseUrl}/cards/american_express.png`;
   } else {
-    return "https://d35a75syrgujp0.cloudfront.net/cards/default_card.png";
+    return `${assetBaseUrl}/cards/default_card.png`;
   }
 };
 
