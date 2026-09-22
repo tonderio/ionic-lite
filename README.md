@@ -160,7 +160,6 @@ npm install @tonder.io/ionic-lite-sdk
 # or
 yarn add @tonder.io/ionic-lite-sdk
 ```
-
 ---
 
 ## 3. Constructor & Configuration
