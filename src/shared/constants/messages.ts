@@ -72,9 +72,9 @@ export const MESSAGES_EN: Record<string, string> = {
     [ErrorKeyEnum.CREATE_ERROR]: 'Error creating the SDK.',
     [ErrorKeyEnum.FETCH_TRANSACTION_ERROR]: 'Error retrieving the transaction.',
     [ErrorKeyEnum.THREEDS_REDIRECTION_ERROR]:
-        'Ocurrió un error durante la redirección de 3DS.',
+        'An error occurred during the 3DS redirection.',
     [ErrorKeyEnum.REMOVE_SDK_ERROR]:
-        'Ocurrió un error removiendo la instancia del SDK.',
+        'An error occurred while removing the SDK instance.',
 };
 
 export const MESSAGES_ES = {
@@ -135,7 +135,7 @@ export const MESSAGES_ES = {
     [ErrorKeyEnum.CREATE_ERROR]: 'Error creando el SDK.',
     [ErrorKeyEnum.FETCH_TRANSACTION_ERROR]: 'Error obteniendo la transacción',
     [ErrorKeyEnum.THREEDS_REDIRECTION_ERROR]:
-        'An error occurred during the 3DS redirection.',
+        'Ocurrió un error durante la redirección de 3DS.',
     [ErrorKeyEnum.REMOVE_SDK_ERROR]:
-        'An error occurred while removing the SDK instance.',
+        'Ocurrió un error removiendo la instancia del SDK.',
 };
