@@ -1,3 +1,8 @@
+import { sanitize3dsMarkup } from "../helpers/sanitize3dsMarkup"
+import { isHttpsUrl } from "../helpers/safeUrl"
+import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum"
+import { buildPublicAppError } from "../shared/utils/appError"
+
 type ThreeDSHandlerContructor = {
   payload?: any,
   apiKey?: string,
@@ -112,7 +117,13 @@ export class ThreeDSHandler {
         if (iframe) {
           this.saveVerifyTransactionUrl()
           const container = document.createElement('div')
-          container.innerHTML = iframe
+          // The 3DS Method step is device fingerprinting, not UI: the ACS form posts
+          // itself into its target frame and nothing here is ever meant to be seen. The
+          // hiding belongs to the SDK rather than to the remote markup that asks for it,
+          // so the sanitizer is free to drop the style attribute, and a fragment that
+          // positions itself over the card fields has nothing to render into.
+          container.style.display = 'none'
+          container.appendChild(sanitize3dsMarkup(iframe))
           document.body.appendChild(container)
 
           // Create and append the script tag manually
@@ -143,6 +154,23 @@ export class ThreeDSHandler {
   redirectToChallenge() {
     const url = this.getRedirectUrl()
     if (url) {
+      // The challenge URL arrives in the remote payload and reaches two sinks below:
+      // window.location and an iframe src. A javascript: URL at either one executes in
+      // the merchant's own origin, next to the card fields.
+      //
+      // Rejection throws rather than skipping the navigation: the caller turns it into
+      // a rejected payment the merchant can surface and the shopper can retry, whereas
+      // doing nothing would strand the shopper mid-challenge with no signal that the
+      // flow had stopped. The error code is locked so it survives the caller's wrapping
+      // and stays distinguishable from an ordinary payment failure.
+      if (!isHttpsUrl(url)) {
+        throw buildPublicAppError({
+          errorCode: ErrorKeyEnum.THREEDS_REDIRECTION_ERROR,
+          statusCode: 400,
+          lockErrorCode: true,
+        })
+      }
+
       this.saveVerifyTransactionUrl()
         if(this.redirectOnComplete) {
           window.location = url;

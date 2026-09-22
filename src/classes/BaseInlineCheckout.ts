@@ -11,6 +11,7 @@ import { getOpenpayDeviceSessionID } from "../data/openPayApi";
 import {
   getBrowserInfo
 } from "../helpers/utils";
+import { validateSecureToken } from "../helpers/validations";
 import { registerOrFetchCustomer } from "../data/customerApi";
 import { get } from "../helpers/get";
 import {
@@ -504,6 +505,13 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }
 
   #setSecureToken(token: string) {
+    if (!validateSecureToken(token)) {
+      throw buildPublicAppError({
+        errorCode: ErrorKeyEnum.SECURE_TOKEN_INVALID,
+        statusCode: 400,
+      });
+    }
+
     this.secureToken = token;
   }
 
