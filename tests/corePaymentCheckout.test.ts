@@ -343,6 +343,46 @@ describe("card payment with the flag ON", () => {
     });
   });
 
+  it("keeps the status text the legacy refusal carries", async () => {
+    const mock = installFetch({ flag: true });
+    const base = mock.getMockImplementation()!;
+    mock.mockImplementation(async (url: string, init?: any) =>
+      url === `${CORE}/transactions/v1/process`
+        ? { ...reply({ status: 400, body: { error: { code: "invalid_request", message: "bad" } } }), statusText: "Bad Request" }
+        : base(url, init),
+    );
+    const { checkout } = buildCheckout();
+
+    const failure = await checkout.payment(paymentData()).catch((e) => e);
+
+    expect(failure.originalError.statusText).toBe("Bad Request");
+  });
+
+  it("carries the core's error code, type and request id in telemetry only", async () => {
+    installFetch({
+      flag: true,
+      process: {
+        status: 409,
+        body: { error: { code: "conflict", message: "busy", type: "conflict" }, request_id: "req-9" },
+      },
+    });
+    const { checkout } = buildCheckout();
+    const report = jest.spyOn(checkout as any, "reportSdkError").mockImplementation(() => {});
+
+    const failure = await checkout.payment(paymentData()).catch((e) => e);
+
+    expect(report).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          core_error: { status: 409, code: "conflict", type: "conflict", request_id: "req-9" },
+        }),
+      }),
+    );
+    const merchantSees = JSON.stringify([failure.originalError, failure.details]);
+    for (const leaked of ["conflict", "req-9"]) expect(merchantSees).not.toContain(leaked);
+  });
+
   it("retries once on the legacy flow when the kill switch refused the create", async () => {
     const mock = installFetch({
       flag: true,

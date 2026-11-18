@@ -41,8 +41,8 @@ import { SdkTelemetryClient } from "../helpers/SdkTelemetryClient";
 import { getApiBaseUrl, getTelemetryEndpoint } from "../shared/constants/apiEndpoints";
 import { SDK_INFO } from "../helpers/sdkInfo";
 import { AppError, buildPublicAppError, buildPublicAppErrorFromAnswer } from "../shared/utils/appError";
-import { createCorePayment, isOperationsDisabled } from "../data/coreApi";
-import { buildCoreProcessBody, newRequestId, rebuildCheckoutResult } from "../helpers/corePayment";
+import { createCorePayment, isOperationsDisabled, isOperationsDisabledAnswer } from "../data/coreApi";
+import { buildCoreProcessBody, describeCoreRefusal, newRequestId, rebuildCheckoutResult } from "../helpers/corePayment";
 type CheckoutRequest = {
   card?: Record<string, any>;
   payment_method?: string;
@@ -323,6 +323,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }: CheckoutRequest) {
     const { reference } = this.merchantData!;
     let payment;
+    let coreError;
     try {
       payment = buildCoreProcessBody({
         amount: Number(this.cartTotal),
@@ -341,13 +342,26 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         payment,
         newRequestId(),
       );
-      const result = rebuildCheckoutResult(answer.status, answer.body, {
-        coreBaseUrl: this.coreBaseUrl,
-      });
+      if (answer.status >= 400) coreError = describeCoreRefusal(answer.status, answer.body);
+      // Nothing was created: the raw answer is kept so the caller can recognise it and fall back.
+      if (isOperationsDisabledAnswer(answer)) {
+        throw buildPublicAppErrorFromAnswer({
+          errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
+          status: answer.status,
+          body: answer.body,
+        });
+      }
+      const result = rebuildCheckoutResult(
+        answer.status,
+        answer.body,
+        { coreBaseUrl: this.coreBaseUrl },
+        answer.statusText,
+      );
       if (result.outcome === "resolve") return result.body;
       throw buildPublicAppErrorFromAnswer({
         errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
         status: result.status,
+        statusText: result.statusText,
         body: result.body,
       });
     } catch (error) {
@@ -357,6 +371,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
           metadata: {
             step: "_handleCheckout",
             payment,
+            core_error: coreError,
           },
         });
       }

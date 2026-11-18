@@ -332,6 +332,48 @@ describe("rebuildCheckoutResult", () => {
     expect(rebuildCheckoutResult(201, { id: "x" }, CTX).outcome).toBe("reject");
   });
 
+  it.each(["Cancelled", "Expired", "SomethingNew", "Failed"])(
+    "does not take the Guardian shape for a '%s' payment carrying the Guardian code",
+    (status) => {
+      const result = rebuildCheckoutResult(
+        200,
+        { ...SUCCESS, status, decline_code: "FH01", decline_reason: "blocked" },
+        CTX,
+      );
+
+      expect(result.outcome).toBe("reject");
+      expect(result.body.status).toBe("404");
+      expect(result.body.transaction_status).toBe(status);
+    },
+  );
+
+  it("rebuilds every refusal of the core in one place, keeping the status text", () => {
+    const result = rebuildCheckoutResult(
+      409,
+      { error: { code: "conflict", message: "busy", type: "conflict" }, request_id: "r-1" },
+      CTX,
+      "Conflict",
+    );
+
+    expect(result).toEqual({
+      outcome: "reject",
+      status: 409,
+      statusText: "Conflict",
+      body: { status: "409", message: "busy", psp_response: [], is_route_finished: false },
+    });
+  });
+
+  it("rebuilds a 402 other than a declined payment as a refusal, not as an ended route", () => {
+    const result = rebuildCheckoutResult(
+      402,
+      { error: { code: "payment_required", message: "pay", type: "business_error" } },
+      CTX,
+    );
+
+    expect(result.status).toBe(402);
+    expect(result.body.is_route_finished).toBe(false);
+  });
+
   it("rejects the normalized 402 of a route that ended with no transaction", () => {
     const result = rebuildCheckoutResult(
       402,
