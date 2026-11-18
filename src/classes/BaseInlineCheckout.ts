@@ -95,7 +95,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     }
 
     this.process3ds = new ThreeDSHandler({
-      apiKey: apiKey,
+      apiKey: this.apiKeyTonder,
       baseUrl: this.baseUrl,
       redirectOnComplete: this.customization.redirectOnComplete,
       tdsIframeId: tdsIframeId,
