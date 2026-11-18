@@ -252,33 +252,50 @@ function buildPublicAppErrorSync(
     });
 }
 
-async function buildPublicAppErrorFromHttpResponse(
-    data: IBuildPublicAppErrorInput & { response: Response },
-): Promise<AppError> {
-    const body = await parseResponseBody(data.response);
-
+/**
+ * Builds the error of an HTTP answer that was already read, or rebuilt by the SDK from
+ * another backend's answer, with the same shape a failed `fetch` produces.
+ */
+export function buildPublicAppErrorFromAnswer(
+    data: IBuildPublicAppErrorInput & {
+        status: number;
+        statusText?: string;
+        body?: unknown;
+    },
+): AppError {
     const originalError: Record<string, unknown> = {
-        status: data.response.status,
+        status: data.status,
     };
 
-    if (data.response.statusText) {
-        originalError.statusText = data.response.statusText;
+    if (data.statusText) {
+        originalError.statusText = data.statusText;
     }
 
-    if (body !== undefined) {
-        originalError.body = body;
+    if (data.body !== undefined) {
+        originalError.body = data.body;
     }
 
     return new AppError({
         errorCode: data.errorCode,
         message: data.message,
-        statusCode: data.statusCode ?? data.response.status,
+        statusCode: data.statusCode ?? data.status,
         details:
             data.details?.systemError !== undefined
                 ? { systemError: data.details.systemError }
                 : undefined,
         originalError,
         lockErrorCode: data.lockErrorCode,
+    });
+}
+
+async function buildPublicAppErrorFromHttpResponse(
+    data: IBuildPublicAppErrorInput & { response: Response },
+): Promise<AppError> {
+    return buildPublicAppErrorFromAnswer({
+        ...data,
+        status: data.response.status,
+        statusText: data.response.statusText,
+        body: await parseResponseBody(data.response),
     });
 }
 

@@ -6,6 +6,7 @@ import {
     getBrowserInfo,
     getBusinessId,
     getCardType,
+    isCardPaymentMethod,
 } from "../helpers/utils";
 import {getCustomerAPMs} from "../data/api";
 import {BaseInlineCheckout} from "./BaseInlineCheckout";
@@ -541,7 +542,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
 
   async _checkout({
     card,
-    payment_method,
+    payment_method: requestedPaymentMethod,
     isSandbox,
     // TODO: DEPRECATED
     returnUrl: returnUrlData
@@ -552,6 +553,12 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     returnUrl?: string;
   }) {
     await this._fetchMerchantData();
+    // The core takes a card payment method in any case and collects the card as for no method;
+    // the legacy flow keeps sending the method exactly as the merchant gave it.
+    const payment_method =
+      this.merchantData?.core_payments_enabled === true && isCardPaymentMethod(requestedPaymentMethod)
+        ? undefined
+        : requestedPaymentMethod;
     const customer = await this._getCustomer(this.abortController.signal) as CustomerRegisterResponse;
     const { business } = this.merchantData!;
     const { auth_token, first_name = "", last_name = "", email = "" } = customer;

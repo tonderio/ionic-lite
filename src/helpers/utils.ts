@@ -23,6 +23,10 @@ export const getBusinessId = (merchantData: any) => {
     : "";
 };
 
+// The backends take a card payment method in any case; a card payment is the one with none.
+export const isCardPaymentMethod = (paymentMethod?: string) =>
+  !paymentMethod || paymentMethod.toLowerCase() === "card";
+
 const clearSpace = (text: string) => {
   return text.trim().replace(/\s+/g, "");
 };
