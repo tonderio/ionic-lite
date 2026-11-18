@@ -231,6 +231,8 @@ export class ThreeDSHandler {
   async requestTransactionStatus() {
 
     const verifyUrl = this.getUrlWithExpiration();
+    // The state expires or is cleared by another tab while the iframe polls.
+    if (!verifyUrl) return null;
     const url = verifyUrl.startsWith("https://") ? verifyUrl : `${this.baseUrl}${verifyUrl}`;
     const response = await fetch(url, {
       method: "GET",
