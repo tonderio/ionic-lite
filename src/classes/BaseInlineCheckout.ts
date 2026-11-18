@@ -9,7 +9,8 @@ import {
 } from "../data/checkoutApi";
 import { getOpenpayDeviceSessionID } from "../data/openPayApi";
 import {
-  getBrowserInfo
+  getBrowserInfo,
+  isCardPaymentMethod
 } from "../helpers/utils";
 import { validateSecureToken } from "../helpers/validations";
 import { registerOrFetchCustomer } from "../data/customerApi";
@@ -37,11 +38,23 @@ import {ErrorKeyEnum} from "../shared/enum/ErrorKeyEnum";
 import { IMPConfigRequest } from "../types/mercadoPago";
 import { CardOnFile } from "../helpers/card_on_file";
 import { SdkTelemetryClient } from "../helpers/SdkTelemetryClient";
-import { getTelemetryEndpoint } from "../shared/constants/apiEndpoints";
+import { getApiBaseUrl, getTelemetryEndpoint } from "../shared/constants/apiEndpoints";
 import { SDK_INFO } from "../helpers/sdkInfo";
-import { AppError, buildPublicAppError } from "../shared/utils/appError";
+import { AppError, buildPublicAppError, buildPublicAppErrorFromAnswer } from "../shared/utils/appError";
+import { createCorePayment, isOperationsDisabled } from "../data/coreApi";
+import { buildCoreProcessBody, newRequestId, rebuildCheckoutResult } from "../helpers/corePayment";
+type CheckoutRequest = {
+  card?: Record<string, any>;
+  payment_method?: string;
+  customer: Record<string, any>;
+  isSandbox?: boolean;
+  returnUrl?: string;
+  enable_card_on_file?: boolean;
+};
+
 export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOptions> {
   baseUrl = "";
+  coreBaseUrl = "";
   cartTotal: string | number = "0";
   process3ds: ThreeDSHandler;
   mode?: "production" | "sandbox" | "stage" | "development" | undefined;
@@ -87,6 +100,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     this.mode = mode;
     this.customer = {} as ICustomer
     this.baseUrl = baseUrlTonder || TONDER_URL_BY_MODE[this.mode] || TONDER_URL_BY_MODE["stage"];
+    this.coreBaseUrl = getApiBaseUrl(this.mode);
     this.abortController = new AbortController();
     this.requestId = this.generateRequestId();
     this.customization = {
@@ -95,8 +109,11 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     }
 
     this.process3ds = new ThreeDSHandler({
-      apiKey: apiKey,
+      apiKey: this.apiKeyTonder,
       baseUrl: this.baseUrl,
+      coreBaseUrl: this.coreBaseUrl,
+      buildCoreResult: (transaction) =>
+        rebuildCheckoutResult(200, transaction, { coreBaseUrl: this.coreBaseUrl }).body,
       redirectOnComplete: this.customization.redirectOnComplete,
       tdsIframeId: tdsIframeId,
       tonderPayButtonId: tonderPayButtonId,
@@ -165,7 +182,16 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }
 
   async verify3dsTransaction(): Promise<ITransaction | IStartCheckoutResponse | void> {
+    const engine = this.process3ds.getStoredEngine();
     const result3ds = await this.process3ds.verifyTransactionStatus();
+    if (engine === "core") {
+      // The core continues its own route after the challenge, so nothing is resumed. A still-open
+      // payment may carry the challenge the buyer just came back from: it is never followed again.
+      this.process3ds.setPayload(result3ds);
+      return result3ds;
+    }
+    // A challenge found while resuming is stored under the engine of this payment, not the last one used.
+    this.process3ds.setEngine("legacy");
     const resultCheckout = await this.#resumeCheckout(result3ds);
     this.process3ds.setPayload(resultCheckout);
     return this._handle3dsRedirect(resultCheckout);
@@ -270,7 +296,75 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     return this.#customerData!;
   }
 
-  async _handleCheckout({
+  // The engine is chosen here, once, and travels with the 3DS state: a payment started
+  // on one engine is finished by it, whatever the merchant's flag does meanwhile.
+  async _handleCheckout(request: CheckoutRequest) {
+    if (this.merchantData?.core_payments_enabled === true && this.#isCorePayment(request)) {
+      this.process3ds.setEngine("core");
+      try {
+        return await this.#coreCheckout(request);
+      } catch (error) {
+        if (!isOperationsDisabled(error)) throw error;
+      }
+    }
+    this.process3ds.setEngine("legacy");
+    return this.#legacyCheckout(request);
+  }
+
+  // Card payments only (new, saved and Card on File: the core decides the latter by itself);
+  // alternative methods stay on the legacy flow.
+  #isCorePayment({ card, payment_method }: CheckoutRequest) {
+    return !!card && isCardPaymentMethod(payment_method);
+  }
+
+  async #coreCheckout({
+    card,
+    returnUrl: returnUrlData
+  }: CheckoutRequest) {
+    const { reference } = this.merchantData!;
+    let payment;
+    try {
+      payment = buildCoreProcessBody({
+        amount: Number(this.cartTotal),
+        currency: this.currency,
+        reference: this.order_reference ? this.order_reference : reference,
+        customer: this.customer,
+        card: card!,
+        metadata: this.metadata,
+        returnUrl: returnUrlData || this.returnUrl,
+        items: this.cartItems,
+        browserInfo: getBrowserInfo(),
+      });
+      const answer = await createCorePayment(
+        this.coreBaseUrl,
+        this.apiKeyTonder,
+        payment,
+        newRequestId(),
+      );
+      const result = rebuildCheckoutResult(answer.status, answer.body, {
+        coreBaseUrl: this.coreBaseUrl,
+      });
+      if (result.outcome === "resolve") return result.body;
+      throw buildPublicAppErrorFromAnswer({
+        errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
+        status: result.status,
+        body: result.body,
+      });
+    } catch (error) {
+      if (!isOperationsDisabled(error)) {
+        this.reportSdkError(error, {
+          feature: "payment",
+          metadata: {
+            step: "_handleCheckout",
+            payment,
+          },
+        });
+      }
+      throw error;
+    }
+  }
+
+  async #legacyCheckout({
     card,
     payment_method,
     customer,
@@ -278,14 +372,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     enable_card_on_file,
     // TODO: DEPRECATED
     returnUrl: returnUrlData
-  }: {
-    card?: Record<string, any>;
-    payment_method?: string;
-    customer: Record<string, any>;
-    isSandbox?: boolean;
-    returnUrl?: string;
-    enable_card_on_file?: boolean;
-  }) {
+  }: CheckoutRequest) {
     const { openpay_keys, reference, business } = this.merchantData!;
     const total = Number(this.cartTotal);
     let orderItems;
@@ -424,7 +511,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     try {
       if (!this.merchantData) {
         this.merchantData = await fetchBusiness(
-          this.baseUrl,
+          this.coreBaseUrl,
           this.apiKeyTonder,
           this.abortController.signal,
         );
@@ -551,7 +638,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
           // setTimeout(() => {
           //   process3ds.verifyTransactionStatus();
           // }, 10000);
-          this.process3ds.verifyTransactionStatus();
+          return this.process3ds.verifyTransactionStatus();
         })
         .catch((error) => {
           console.log("Error loading iframe:", error);

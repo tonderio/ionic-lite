@@ -2,11 +2,25 @@ import { sanitize3dsMarkup } from "../helpers/sanitize3dsMarkup"
 import { isHttpsUrl } from "../helpers/safeUrl"
 import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum"
 import { buildPublicAppError } from "../shared/utils/appError"
+import { ICoreTransactionResponse, PaymentEngine } from "../types/core"
+
+type CoreResultBuilder = (transaction: ICoreTransactionResponse) => Record<string, any>
+
+// A core payment that has not reached one of these is still open.
+const OPEN_CORE_STATUSES = ["Pending", "Processing"]
+
+type StoredVerification = {
+  url: string,
+  expires: number,
+  engine?: PaymentEngine
+}
 
 type ThreeDSHandlerContructor = {
   payload?: any,
   apiKey?: string,
   baseUrl?: string,
+  coreBaseUrl?: string,
+  buildCoreResult?: CoreResultBuilder,
   redirectOnComplete?: boolean,
   tdsIframeId?: string, 
   tonderPayButtonId?: string,
@@ -17,6 +31,9 @@ export class ThreeDSHandler {
 
   callBack?: (params: any) => any
   baseUrl?: string
+  coreBaseUrl?: string
+  buildCoreResult: CoreResultBuilder
+  engine: PaymentEngine = "legacy"
   apiKey?: string
   payload?: any
   localStorageKey: string = "verify_transaction_status_url"
@@ -28,12 +45,16 @@ export class ThreeDSHandler {
     payload = null,
     apiKey,
     baseUrl,
+    coreBaseUrl,
+    buildCoreResult = (transaction) => transaction,
     redirectOnComplete,
     tdsIframeId,
     tonderPayButtonId,
     callBack
   }: ThreeDSHandlerContructor) {
+    this.buildCoreResult = buildCoreResult
     this.baseUrl = baseUrl,
+    this.coreBaseUrl = coreBaseUrl,
     this.apiKey = apiKey,
     this.payload = payload
     this.tdsIframeId = tdsIframeId
@@ -68,13 +89,18 @@ export class ThreeDSHandler {
     }
   }
 
+  setEngine(engine: PaymentEngine) {
+    this.engine = engine
+  }
+
   saveUrlWithExpiration(url: string) {
     try {
       const now = new Date()
-      const item = {
+      const item: StoredVerification = {
         url: url,
         // Expires after 20 minutes
-        expires: now.getTime() + 20 * 60 * 1000
+        expires: now.getTime() + 20 * 60 * 1000,
+        engine: this.engine
       }
       this.setStorageItem(item)
     } catch (error) {
@@ -82,7 +108,7 @@ export class ThreeDSHandler {
     }
   }
 
-  getUrlWithExpiration() {
+  getStoredVerification(): StoredVerification | null | undefined {
     const status = this.getStorageItem();
     if(status) {
       const item = JSON.parse(status)
@@ -92,11 +118,21 @@ export class ThreeDSHandler {
           this.removeVerifyTransactionUrl()
           return null
         } else {
-          return item.url
+          return item
         }
     } else {
       return null
     }
+  }
+
+  getUrlWithExpiration() {
+    const item = this.getStoredVerification()
+    return item === undefined ? undefined : item?.url ?? null
+  }
+
+  // A state stored before the engine existed belongs to a legacy payment.
+  getStoredEngine(): PaymentEngine {
+    return this.getStoredVerification()?.engine === "core" ? "core" : "legacy"
   }
 
   removeVerifyTransactionUrl() {
@@ -184,7 +220,7 @@ export class ThreeDSHandler {
             const self = this;
   
             const listenerHandler = async (event: any) => {
-              const checkStatus = (result: any) => result?.transaction_status !== "Pending";
+              const checkStatus = (result: any) => self.isVerificationFinal(result);
   
               const executeAction = () => {
                 try {
@@ -228,11 +264,11 @@ export class ThreeDSHandler {
     }
   }
 
-  async requestTransactionStatus() {
-
-    const verifyUrl = this.getUrlWithExpiration();
-    const url = verifyUrl.startsWith("https://") ? verifyUrl : `${this.baseUrl}${verifyUrl}`;
-    const response = await fetch(url, {
+  // The verify URL of a core payment is relative to the core, not to the monolith.
+  async fetchVerification(item: StoredVerification) {
+    const base = item.engine === "core" ? this.coreBaseUrl : this.baseUrl
+    const url = item.url.startsWith("https://") ? item.url : `${base}${item.url}`;
+    return await fetch(url, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -240,17 +276,29 @@ export class ThreeDSHandler {
       },
       // body: JSON.stringify(data),
     });
-
-    if (response.status !== 200) {
-      console.error('La verificación de la transacción falló.');
-      return null;
-    } else {
-      const response_json = await response.json();
-      return response_json;
-    }
-
   }
-  
+
+  async requestTransactionStatus() {
+    const item = this.getStoredVerification()
+    // The state expires or is cleared by another tab while the iframe polls.
+    if (!item) return null;
+    let response: Response;
+    try {
+      response = await this.fetchVerification(item);
+      if (response.status === 200) return await response.json();
+    } catch (error) {
+      if (this.isTransientCoreFailure(item)) return this.keepPolling();
+      throw error;
+    }
+    console.error('La verificación de la transacción falló.');
+    return this.isTransientCoreFailure(item, response.status) ? this.keepPolling() : null;
+  }
+
+  // A server error, a throttle or a dropped connection is not an answer: the poller asks again.
+  keepPolling() {
+    return { status: "Pending", transaction_status: "Pending" }
+  }
+
   // Returns an object
   // https://example.com/?name=John&age=30&city=NewYork
   // { name: "John", age: "30", city: "NewYork" }
@@ -317,29 +365,57 @@ export class ThreeDSHandler {
     }
   }
 
+  // A core payment is open until the core says otherwise, whatever the rail answered meanwhile.
+  isCoreOpen(transaction: ICoreTransactionResponse) {
+    return OPEN_CORE_STATUSES.includes(transaction?.status)
+  }
+
+  // The core continues its own route, so there is nothing to resume here: the payment is
+  // read and answered like pay() answers it. An open payment keeps its state so a later
+  // call can get the outcome.
+  async handleCoreTransaction(response: Response) {
+    const transaction = await response.json();
+    if (!this.isCoreOpen(transaction)) this.removeVerifyTransactionUrl();
+    return this.buildCoreResult(transaction);
+  }
+
+  // The iframe poller stops on a final answer.
+  isVerificationFinal(result: any) {
+    return this.engine === "core"
+      ? !this.isCoreOpen(result)
+      : result?.transaction_status !== "Pending"
+  }
+
+  // Only a refusal that will not change (the payment cannot be read) ends a core verification;
+  // a server error, a throttle or a dropped connection leaves it to be tried again.
+  isTransientCoreFailure(item: StoredVerification, status?: number) {
+    return item.engine === "core" && (status === undefined || status >= 500 || status === 429 || status === 408)
+  }
+
   async verifyTransactionStatus() {
-    const verifyUrl = this.getUrlWithExpiration();
-    if (verifyUrl) {
-      const url = verifyUrl.startsWith("https://") ? verifyUrl : `${this.baseUrl}${verifyUrl}`;
+    const item = this.getStoredVerification();
+    if (item?.url) {
       try {
-        const response = await fetch(url, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Token ${this.apiKey}`,
-          },
-          // body: JSON.stringify(data),
-        });
+        const response = await this.fetchVerification(item);
 
         if (response.status !== 200) {
           console.error('La verificación de la transacción falló.');
-          this.removeVerifyTransactionUrl();
+          if (!this.isTransientCoreFailure(item, response.status)) this.removeVerifyTransactionUrl();
+          if (item.engine === "core") {
+            throw await buildPublicAppError({ response, errorCode: ErrorKeyEnum.FETCH_TRANSACTION_ERROR });
+          }
           return response
         }
 
+        if (item.engine === "core") {
+          return await this.handleCoreTransaction(response);
+        }
         return await this.handleTransactionResponse(response);
       } catch (error) {
         console.error('Error al verificar la transacción:', error);
+        if (item.engine === "core") {
+          throw buildPublicAppError({ errorCode: ErrorKeyEnum.FETCH_TRANSACTION_ERROR }, error);
+        }
         this.removeVerifyTransactionUrl();
       }
     } else {
