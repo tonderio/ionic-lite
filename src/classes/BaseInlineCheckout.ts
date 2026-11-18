@@ -37,11 +37,12 @@ import {ErrorKeyEnum} from "../shared/enum/ErrorKeyEnum";
 import { IMPConfigRequest } from "../types/mercadoPago";
 import { CardOnFile } from "../helpers/card_on_file";
 import { SdkTelemetryClient } from "../helpers/SdkTelemetryClient";
-import { getTelemetryEndpoint } from "../shared/constants/apiEndpoints";
+import { getApiBaseUrl, getTelemetryEndpoint } from "../shared/constants/apiEndpoints";
 import { SDK_INFO } from "../helpers/sdkInfo";
 import { AppError, buildPublicAppError } from "../shared/utils/appError";
 export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOptions> {
   baseUrl = "";
+  coreBaseUrl = "";
   cartTotal: string | number = "0";
   process3ds: ThreeDSHandler;
   mode?: "production" | "sandbox" | "stage" | "development" | undefined;
@@ -87,6 +88,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     this.mode = mode;
     this.customer = {} as ICustomer
     this.baseUrl = baseUrlTonder || TONDER_URL_BY_MODE[this.mode] || TONDER_URL_BY_MODE["stage"];
+    this.coreBaseUrl = getApiBaseUrl(this.mode);
     this.abortController = new AbortController();
     this.requestId = this.generateRequestId();
     this.customization = {
@@ -424,7 +426,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     try {
       if (!this.merchantData) {
         this.merchantData = await fetchBusiness(
-          this.baseUrl,
+          this.coreBaseUrl,
           this.apiKeyTonder,
           this.abortController.signal,
         );

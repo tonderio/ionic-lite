@@ -46,6 +46,11 @@ export type Business = {
   reference: number;
   is_installments_available: boolean;
   cardonfile_keys?: CardOnFileKeys;
+  /**
+   * The merchant's switch already evaluated with the kill switch: when true, card
+   * payments are charged by the core instead of the legacy flow.
+   */
+  core_payments_enabled?: boolean;
 };
 
 export type Customer = {

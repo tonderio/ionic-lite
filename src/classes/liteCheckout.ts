@@ -458,7 +458,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   public async getBusiness(): Promise<GetBusinessResponse> {
     try {
       return await fetchBusiness(
-        this.baseUrl,
+        this.coreBaseUrl,
         this.apiKeyTonder,
         this.abortController.signal,
       );

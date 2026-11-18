@@ -15,6 +15,7 @@ export const API_ENDPOINTS = Object.freeze({
   TELEMETRY: "/telemetry/v1/events",
   ACQ_SUBSCRIPTION_TOKEN: "/acq-kushki/subscription/token",
   ACQ_SUBSCRIPTION_CREATE: "/acq-kushki/subscription/create",
+  CORE_BUSINESS_CONFIG: "/transactions/v1/business/config",
 });
 
 /**

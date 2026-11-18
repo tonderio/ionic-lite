@@ -298,6 +298,15 @@ The SDK must be initialized in this exact order before any other method is calle
 | `'stage'` | `https://stage.tonder.io` |
 | `'production'` | `https://app.tonder.io` |
 
+**Start-up configuration.** `injectCheckout()` reads the business configuration (vault, processors' public keys, `core_payments_enabled`) from Tonder's core API, for every merchant, with your `apiKey` in the `Authorization` header. The core API base URL also depends on `mode`:
+
+| `mode` | Core API base URL |
+|--------|-------------------|
+| `'stage'`, `'sandbox'`, `'development'` | `https://api-stage.tonder.io` |
+| `'production'` | `https://api.tonder.io` |
+
+The SDK needs to reach this host from the WebView. Contact Tonder to have your app's origin (for example `capacitor://localhost`) allowed for your business.
+
 ---
 
 ### Fetching the secure token
@@ -1263,7 +1272,7 @@ customization: {
 | Property | Replacement | Notes |
 |----------|-------------|-------|
 | `apiKeyTonder` | `apiKey` | Renamed for clarity |
-| `baseUrlTonder` | `mode` | Replaced by environment enum (`'stage'` \| `'production'` \| ...) |
+| `baseUrlTonder` | `mode` | Replaced by environment enum (`'stage'` \| `'production'` \| ...). It still overrides the legacy API host, but the core API host (start-up configuration and core payments) is always derived from `mode` and ignores it |
 | `signal` | (removed) | AbortController signal is no longer needed |
 
 ### Deprecated methods
