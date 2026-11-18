@@ -21,7 +21,7 @@ Card data is collected through **Skyflow secure iframes** — raw card values ne
    - [6.2 Pay with a saved card](#62-pay-with-a-saved-card)
    - [6.3 Alternative Payment Method (APM)](#63-alternative-payment-method-apm)
    - [6.4 Payment response reference](#64-payment-response-reference)
-   - [6.5 Core payments](#65-core-payments)
+   - [6.5 Payments API](#65-payments-api)
 7. [3DS Handling](#7-3ds-handling)
 8. [Managing Saved Cards](#8-managing-saved-cards)
    - [8.1 List saved cards](#81-list-saved-cards)
@@ -106,14 +106,14 @@ export class CheckoutComponent implements OnInit {
     // If this page load is a return from a 3DS challenge, the SDK verifies the
     // transaction and, if routing is configured, may automatically retry with
     // the next payment route. Await the result before deciding what to do next.
-    // It rejects when the core cannot be read: wrap it in try/catch (see verify3dsTransaction()).
+    // It rejects when the payments API cannot be read: wrap it in try/catch (see verify3dsTransaction()).
     const tdsResult = await this.liteCheckout.verify3dsTransaction();
     if (tdsResult) {
       const status = (tdsResult as any).transaction_status;
       if (status === 'Success' ) {
         // navigate to order confirmation
       } else if (status === 'Pending' || status === 'Processing') {
-        // the core has not finished: verify again later
+        // the payments API has not finished: verify again later
       } else {
         // show error to the user
       }
@@ -302,9 +302,9 @@ The SDK must be initialized in this exact order before any other method is calle
 | `'stage'` | `https://stage.tonder.io` |
 | `'production'` | `https://app.tonder.io` |
 
-**Start-up configuration.** `injectCheckout()` reads the business configuration (vault, processors' public keys, `core_payments_enabled`) from Tonder's core API, for every merchant, with your `apiKey` in the `Authorization` header. The core API base URL also depends on `mode`:
+**Start-up configuration.** `injectCheckout()` reads the business configuration (vault, processors' public keys, `core_payments_enabled`) from Tonder's payments API, for every merchant, with your `apiKey` in the `Authorization` header. The payments API base URL also depends on `mode`:
 
-| `mode` | Core API base URL |
+| `mode` | Payments API base URL |
 |--------|-------------------|
 | `'stage'`, `'sandbox'`, `'development'` | `https://api-stage.tonder.io` |
 | `'production'` | `https://api.tonder.io` |
@@ -375,14 +375,14 @@ Only relevant when `redirectOnComplete: true` (the default). When using `redirec
 
 When using the default mode, call this on **every page load**. If the page was loaded as a return from a 3DS redirect, it verifies the transaction and — if the merchant has routing configured and the transaction was declined — **automatically retries with the next payment route**. Resolves with the final transaction result, or `void` on a normal (non-3DS) page load.
 
-For a payment charged by the core ([6.5](#65-core-payments)) it resolves with the same body `payment()` resolves with, whose `transaction_status` is the core's status: `Pending` or `Processing` while the core has not finished, so check for a final status before concluding. When the core cannot be read it **rejects** with `FETCH_TRANSACTION_ERROR` (the HTTP status is in `error.statusCode`). The 3DS state is kept after a 5xx, 429 or network failure, so the call can be repeated on the next load; a 401 or 404 clears it. Wrap the call in `try/catch` so a core outage does not stop your page from initializing.
+For a payment charged by the payments API ([6.5](#65-payments-api)) it resolves with the same body `payment()` resolves with, whose `transaction_status` is the payments API's status: `Pending` or `Processing` while the payments API has not finished, so check for a final status before concluding. When the payments API cannot be read it **rejects** with `FETCH_TRANSACTION_ERROR` (the HTTP status is in `error.statusCode`). The 3DS state is kept after a 5xx, 429 or network failure, so the call can be repeated on the next load; a 401 or 404 clears it. Wrap the call in `try/catch` so an outage of the payments API does not stop your page from initializing.
 
 ```typescript
 let result;
 try {
   result = await liteCheckout.verify3dsTransaction();
 } catch (error) {
-  // The core could not be read (FETCH_TRANSACTION_ERROR): show a retry message
+  // The payments API could not be read (FETCH_TRANSACTION_ERROR): show a retry message
 }
 
 if (result) {
@@ -755,17 +755,17 @@ interface IStartCheckoutResponse {
 
 > **Note:** 3DS authentication is handled automatically by the SDK. You do not need to handle redirection yourself.
 
-### 6.5 Core payments
+### 6.5 Payments API
 
-When the business configuration the SDK reads at start-up says `core_payments_enabled: true` for your business, card payments (new card and saved card) are charged by Tonder's core API instead of the legacy flow. Nothing changes in your integration: same key, same `payment()` arguments, same resolved object, same `callBack`, same rejection details, same statuses.
+When the business configuration the SDK reads at start-up says `core_payments_enabled: true` for your business, card payments (new card and saved card) are charged by Tonder's payments API instead of the legacy flow. Nothing changes in your integration: same key, same `payment()` arguments, same resolved object, same `callBack`, same rejection details, same statuses.
 
 - The payment is sent to `POST /transactions/v1/process` with `Authorization: Token <apiKey>` and the header `X-App-Origin: sdk/ionic`, and one `X-Request-Id` per `payment()` call. Cart `items` and `metadata` travel in that request. No `orders` or `business/<id>/payments` request is made.
-- The core's answer is turned back into the `checkout-router` body described in [6.4](#64-payment-response-reference), so `payment()` resolves, or rejects with `error.details`, exactly as before.
-- Card On File payments go to the core like any saved card: the core decides the subscription charge itself. A `payment_method` of `CARD` (any case) is a card payment on the core path; alternative payment methods keep using the legacy flow whatever the flag says. A failed verification of a core payment rejects with `FETCH_TRANSACTION_ERROR`, and for a core payment `verify3dsTransaction()` never follows its challenge again.
+- The payments API's answer is turned back into the `checkout-router` body described in [6.4](#64-payment-response-reference), so `payment()` resolves, or rejects with `error.details`, exactly as before.
+- Card On File payments go to the payments API like any saved card: the payments API decides the subscription charge itself. A `payment_method` of `CARD` (any case) is a card payment on the payments API path; alternative payment methods keep using the legacy flow whatever the flag says. A failed verification of a payment charged by the payments API rejects with `FETCH_TRANSACTION_ERROR`, and for such a payment `verify3dsTransaction()` never follows its challenge again.
 - The request also carries the customer's `phone` and `identification` and the browser information (`browser_info`) the legacy flow sent.
-- The engine is chosen once per payment and kept with the 3DS state in `localStorage`: a payment started on the core is verified against the core after the challenge, even if the flag changes meanwhile. The core continues its own route after the 3DS challenge, so for a core payment `verify3dsTransaction()` does no routing work: it reads `GET /transactions/v1/{id}` once and returns the same body `payment()` resolves with, keeping the 3DS state while the payment is still `Pending` or `Processing`, and after a server error, a throttle or a network failure, so the verification can be tried again; only a refusal such as 401 or 404 clears it. Whether a core payment is open or final is the core's `status`, not the rail's.
-- If the core refuses to create the payment because operations are disabled (HTTP 503, `operations_disabled`), the SDK retries that payment once on the legacy flow.
-- **Declared difference:** the `refund_transaction` entry of `actions` points at the core refund (`POST <core base URL>/transactions/v1/process`, authorized with the same API key) instead of the legacy refund route, and `verify_transaction_status` points at the core's `GET <core base URL>/transactions/v1/{id}` instead of the monolith's per-rail route (the verify of a core payment no longer answers the monolith's rail-row body). The action also carries a `body` hint, `{ operation_type: 'refund', original_transaction_id }`; send it with your `amount` and optional `reason`.
+- The engine is chosen once per payment and kept with the 3DS state in `localStorage`: a payment started on the payments API is verified against the payments API after the challenge, even if the flag changes meanwhile. The payments API continues its own route after the 3DS challenge, so for such a payment `verify3dsTransaction()` does no routing work: it reads `GET /transactions/v1/{id}` once and returns the same body `payment()` resolves with, keeping the 3DS state while the payment is still `Pending` or `Processing`, and after a server error, a throttle or a network failure, so the verification can be tried again; only a refusal such as 401 or 404 clears it. Whether a payment charged by the payments API is open or final is the payments API's `status`, not the payment processor's.
+- If the payments API refuses to create the payment because operations are disabled (HTTP 503, `operations_disabled`), the SDK retries that payment once on the legacy flow.
+- **Declared difference:** the `refund_transaction` entry of `actions` points at the payments API refund (`POST <payments API base URL>/transactions/v1/process`, authorized with the same API key) instead of the legacy refund route, and `verify_transaction_status` points at the payments API's `GET <payments API base URL>/transactions/v1/{id}` instead of the legacy per-provider verify route (the verify of such a payment no longer answers the legacy per-provider verify body). The action also carries a `body` hint, `{ operation_type: 'refund', original_transaction_id }`; send it with your `amount` and optional `reason`.
 
 ---
 
@@ -1297,7 +1297,7 @@ customization: {
 | Property | Replacement | Notes |
 |----------|-------------|-------|
 | `apiKeyTonder` | `apiKey` | Renamed for clarity |
-| `baseUrlTonder` | `mode` | Replaced by environment enum (`'stage'` \| `'production'` \| ...). It still overrides the legacy API host, but the core API host (start-up configuration and core payments) is always derived from `mode` and ignores it |
+| `baseUrlTonder` | `mode` | Replaced by environment enum (`'stage'` \| `'production'` \| ...). It still overrides the legacy API host, but the payments API host (start-up configuration and payments API) is always derived from `mode` and ignores it |
 | `signal` | (removed) | AbortController signal is no longer needed |
 
 ### Deprecated methods
