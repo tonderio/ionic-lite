@@ -309,6 +309,8 @@ The SDK must be initialized in this exact order before any other method is calle
 | `'stage'`, `'sandbox'`, `'development'` | `https://api-stage.tonder.io` |
 | `'production'` | `https://api.tonder.io` |
 
+If the configuration cannot be read (a refusal, a server error, a network failure or an unreadable answer), `injectCheckout()` and `mountCardFields()` reject with `FETCH_BUSINESS_ERROR` and the SDK does not fall back to another source; the next call asks again.
+
 The SDK needs to reach this host from the WebView. Contact Tonder to have your app's origin (for example `capacitor://localhost`) allowed for your business.
 
 ---

@@ -308,6 +308,30 @@ describe("rebuildCheckoutResult", () => {
     });
   });
 
+  it.each(["Success", "Authorized", "Pending", "Processing"])(
+    "resolves a '%s' payment",
+    (status) => {
+      expect(rebuildCheckoutResult(201, { ...SUCCESS, status }, CTX).outcome).toBe("resolve");
+    },
+  );
+
+  it.each(["Cancelled", "Canceled", "Expired", "Voided", "Returned", "Error", "SomethingNew", ""])(
+    "never treats a '%s' status as approved",
+    (status) => {
+      const result = rebuildCheckoutResult(201, { ...SUCCESS, status }, CTX);
+
+      expect(result.outcome).toBe("reject");
+      expect(result.status).toBe(404);
+      expect(result.body.status).toBe("404");
+      expect(result.body.message).not.toBe("Success");
+      expect(result.body.transaction_status).toBe(status);
+    },
+  );
+
+  it("never treats an answer without a status as approved", () => {
+    expect(rebuildCheckoutResult(201, { id: "x" }, CTX).outcome).toBe("reject");
+  });
+
   it("rejects the normalized 402 of a route that ended with no transaction", () => {
     const result = rebuildCheckoutResult(
       402,

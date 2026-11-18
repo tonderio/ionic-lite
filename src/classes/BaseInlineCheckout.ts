@@ -524,7 +524,9 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
           step: "_fetchMerchantData",
         },
       });
-      return this.merchantData;
+      // Without its configuration the SDK cannot tell which engine charges, and it never falls
+      // back to another source: the caller gets a clear error and the next call asks again.
+      throw buildPublicAppError({ errorCode: ErrorKeyEnum.FETCH_BUSINESS_ERROR }, e);
     }
   }
 

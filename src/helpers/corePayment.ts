@@ -4,6 +4,8 @@ import { ICoreTransactionResponse } from "../types/core";
 
 const GUARDIAN_DECLINE_CODE = "FH01";
 
+const RESOLVED_STATUSES = ["Success", "Authorized", "Pending", "Processing"];
+
 const CARD_FIELDS = [
   "card_number",
   "cvv",
@@ -166,11 +168,23 @@ export function rebuildCheckoutResult(
   }
 
   const transaction = body as ICoreTransactionResponse;
-  if (transaction.status !== "Declined" && transaction.status !== "Failed") {
+  // Only a status the SDK knows to be good resolves; Declined, Failed and any other
+  // (Cancelled, Expired, a status added later) answer as a decline.
+  if (RESOLVED_STATUSES.includes(transaction.status)) {
     return { outcome: "resolve", status: 200, body: approvedBody(transaction, ctx) };
   }
   if (transaction.decline_code === GUARDIAN_DECLINE_CODE) {
     return { outcome: "resolve", status: 200, body: guardianBody(transaction) };
   }
   return { outcome: "reject", status: 404, body: declinedBody(transaction, ctx) };
+}
+
+/** The body checkout-router answered on a failed start: its own shape, never the core's raw error. */
+export function buildCheckoutRouterErrorBody(status: number, body: any) {
+  return {
+    status: String(status),
+    message: body?.error?.message ?? "Error",
+    psp_response: [],
+    is_route_finished: false,
+  };
 }

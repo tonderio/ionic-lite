@@ -1,7 +1,7 @@
 import { API_ENDPOINTS } from "../shared/constants/apiEndpoints";
 import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
-import { AppError, buildPublicAppError } from "../shared/utils/appError";
-import { buildCoreProcessBody } from "../helpers/corePayment";
+import { AppError, buildPublicAppError, buildPublicAppErrorFromAnswer } from "../shared/utils/appError";
+import { buildCheckoutRouterErrorBody, buildCoreProcessBody } from "../helpers/corePayment";
 
 export const SDK_APP_ORIGIN = "sdk/ionic";
 
@@ -37,7 +37,13 @@ export async function createCorePayment(
   if (response.status === 402 && coreErrorCode(refusal) === "payment_declined") {
     return { status: 402, body: (refusal.originalError as any).body };
   }
-  throw refusal;
+  if (isOperationsDisabled(refusal)) throw refusal;
+  const { status } = refusal.originalError as { status: number };
+  throw buildPublicAppErrorFromAnswer({
+    errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
+    status,
+    body: buildCheckoutRouterErrorBody(status, (refusal.originalError as any).body),
+  });
 }
 
 function coreErrorCode(error: AppError): string | undefined {

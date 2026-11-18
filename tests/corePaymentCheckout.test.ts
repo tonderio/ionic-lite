@@ -319,6 +319,30 @@ describe("card payment with the flag ON", () => {
     expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(0);
   });
 
+  it.each([
+    [400, { error: { code: "invalid_request", message: "bad body", type: "validation_error" }, request_id: "r" }],
+    [409, { error: { code: "conflict", message: "busy", type: "conflict" } }],
+    [429, { error: { code: "rate_limited", message: "slow down", type: "service_error" } }],
+    [503, { error: { code: "retry_later", message: "later", type: "service_error" } }],
+    [502, undefined],
+  ])("rejects a %s with the checkout-router error shape, not the raw answer", async (status, body) => {
+    installFetch({ flag: true, process: { status, body } });
+    const { checkout } = buildCheckout();
+
+    const failure = await checkout.payment(paymentData()).catch((e) => e);
+
+    expect(failure.code).toBe(ErrorKeyEnum.PAYMENT_PROCESS_ERROR);
+    expect(failure.statusCode).toBe(status);
+    expect(failure.originalError.status).toBe(status);
+    expect(failure.originalError.body).not.toHaveProperty("error");
+    expect(failure.originalError.body).toEqual({
+      status: String(status),
+      message: (body as any)?.error?.message ?? "Error",
+      psp_response: [],
+      is_route_finished: false,
+    });
+  });
+
   it("retries once on the legacy flow when the kill switch refused the create", async () => {
     const mock = installFetch({
       flag: true,
