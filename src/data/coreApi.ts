@@ -1,15 +1,14 @@
 import { API_ENDPOINTS } from "../shared/constants/apiEndpoints";
-import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
-import { AppError, buildPublicAppError } from "../shared/utils/appError";
+import { AppError } from "../shared/utils/appError";
 import { buildCoreProcessBody } from "../helpers/corePayment";
 
 export const SDK_APP_ORIGIN = "sdk/ionic";
 
-export type CoreAnswer = { status: number; body: any };
+export type CoreAnswer = { status: number; statusText?: string; body: any };
 
 /**
- * Creates a card payment in the core. A route that ended with no transaction answers a
- * normalized 402, which is a payment result, so it is returned; any other refusal throws.
+ * Creates a card payment in the core and answers whatever the core answered, a refusal
+ * included: turning an answer into what the merchant sees is `rebuildCheckoutResult`'s job.
  */
 export async function createCorePayment(
   coreBaseUrl: string,
@@ -28,27 +27,21 @@ export async function createCorePayment(
     body: JSON.stringify(payment),
   });
 
-  if (response.ok) return { status: response.status, body: await response.json() };
-
-  const refusal = await buildPublicAppError({
-    response,
-    errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
-  });
-  if (response.status === 402 && coreErrorCode(refusal) === "payment_declined") {
-    return { status: 402, body: (refusal.originalError as any).body };
-  }
-  throw refusal;
-}
-
-function coreErrorCode(error: AppError): string | undefined {
-  return (error.originalError as any)?.body?.error?.code;
+  const body = response.ok ? await response.json() : await response.json().catch(() => undefined);
+  return { status: response.status, statusText: response.statusText, body };
 }
 
 /** The kill switch refused the create: nothing was created, so the legacy flow may take over. */
 export function isOperationsDisabled(error: unknown): boolean {
   return (
     error instanceof AppError &&
-    error.statusCode === 503 &&
-    coreErrorCode(error) === "operations_disabled"
+    isOperationsDisabledAnswer({
+      status: error.statusCode,
+      body: (error.originalError as any)?.body,
+    })
   );
+}
+
+export function isOperationsDisabledAnswer(answer: Pick<CoreAnswer, "status" | "body">): boolean {
+  return answer.status === 503 && answer.body?.error?.code === "operations_disabled";
 }

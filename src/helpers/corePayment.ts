@@ -4,6 +4,8 @@ import { ICoreTransactionResponse } from "../types/core";
 
 const GUARDIAN_DECLINE_CODE = "FH01";
 
+const RESOLVED_STATUSES = ["Success", "Authorized", "Pending", "Processing"];
+
 const CARD_FIELDS = [
   "card_number",
   "cvv",
@@ -31,6 +33,7 @@ export type RebuiltResult = {
   outcome: "resolve" | "reject";
   /** The HTTP status `checkout-router` answered with. */
   status: number;
+  statusText?: string;
   body: Record<string, any>;
 };
 
@@ -156,21 +159,53 @@ export function rebuildCheckoutResult(
   httpStatus: number,
   body: any,
   ctx: CoreResultContext,
+  statusText?: string,
 ): RebuiltResult {
-  if (httpStatus === 402) {
+  if (httpStatus === 402 && body?.error?.code === "payment_declined") {
     return {
       outcome: "reject",
       status: 404,
       body: { status: "404", message: "Error", psp_response: [], is_route_finished: true },
     };
   }
+  // Every other refusal of the core, in the shape and with the status text checkout-router used.
+  if (httpStatus >= 400) {
+    return {
+      outcome: "reject",
+      status: httpStatus,
+      statusText,
+      body: buildCheckoutRouterErrorBody(httpStatus, body),
+    };
+  }
 
   const transaction = body as ICoreTransactionResponse;
-  if (transaction.status !== "Declined" && transaction.status !== "Failed") {
+  // Only a status the SDK knows to be good resolves; Declined, Failed and any other
+  // (Cancelled, Expired, a status added later) answer as a decline.
+  if (RESOLVED_STATUSES.includes(transaction.status)) {
     return { outcome: "resolve", status: 200, body: approvedBody(transaction, ctx) };
   }
-  if (transaction.decline_code === GUARDIAN_DECLINE_CODE) {
+  if (transaction.status === "Declined" && transaction.decline_code === GUARDIAN_DECLINE_CODE) {
     return { outcome: "resolve", status: 200, body: guardianBody(transaction) };
   }
   return { outcome: "reject", status: 404, body: declinedBody(transaction, ctx) };
+}
+
+/** What support needs to match a refusal with the core's own log; it never reaches the merchant. */
+export function describeCoreRefusal(httpStatus: number, body: any) {
+  return {
+    status: httpStatus,
+    code: body?.error?.code,
+    type: body?.error?.type,
+    request_id: body?.request_id,
+  };
+}
+
+/** The body checkout-router answered on a failed start: its own shape, never the core's raw error. */
+function buildCheckoutRouterErrorBody(status: number, body: any) {
+  return {
+    status: String(status),
+    message: body?.error?.message ?? "Error",
+    psp_response: [],
+    is_route_finished: false,
+  };
 }
