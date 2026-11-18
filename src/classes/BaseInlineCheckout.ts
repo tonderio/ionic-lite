@@ -99,6 +99,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     this.process3ds = new ThreeDSHandler({
       apiKey: this.apiKeyTonder,
       baseUrl: this.baseUrl,
+      coreBaseUrl: this.coreBaseUrl,
       redirectOnComplete: this.customization.redirectOnComplete,
       tdsIframeId: tdsIframeId,
       tonderPayButtonId: tonderPayButtonId,
@@ -167,7 +168,16 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }
 
   async verify3dsTransaction(): Promise<ITransaction | IStartCheckoutResponse | void> {
+    const engine = this.process3ds.getStoredEngine();
     const result3ds = await this.process3ds.verifyTransactionStatus();
+    if (engine === "core") {
+      // The core continues its own route after the challenge, so nothing is resumed. A still-open
+      // payment may carry the challenge the buyer just came back from: it is never followed again.
+      this.process3ds.setPayload(result3ds);
+      return result3ds;
+    }
+    // A challenge found while resuming is stored under the engine of this payment, not the last one used.
+    this.process3ds.setEngine("legacy");
     const resultCheckout = await this.#resumeCheckout(result3ds);
     this.process3ds.setPayload(resultCheckout);
     return this._handle3dsRedirect(resultCheckout);
@@ -553,7 +563,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
           // setTimeout(() => {
           //   process3ds.verifyTransactionStatus();
           // }, 10000);
-          this.process3ds.verifyTransactionStatus();
+          return this.process3ds.verifyTransactionStatus();
         })
         .catch((error) => {
           console.log("Error loading iframe:", error);
