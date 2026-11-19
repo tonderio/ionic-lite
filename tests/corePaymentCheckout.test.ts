@@ -5,7 +5,7 @@ import { ErrorKeyEnum } from "../src/shared/enum/ErrorKeyEnum";
 const API_KEY = "merchant-api-key";
 const LEGACY = "https://stage.tonder.io";
 const CORE = "https://api-stage.tonder.io";
-const PUBLIC_ID = "0192b8a0-0000-7000-8000-000000000001";
+const TRANSACTION_ID = "0192b8a0-0000-7000-8000-000000000001";
 
 const ITEMS = [
   {
@@ -35,7 +35,7 @@ function config(flag: boolean | undefined) {
 }
 
 const CORE_SUCCESS = {
-  id: PUBLIC_ID,
+  id: TRANSACTION_ID,
   status: "Success",
   amount: 100,
   currency: "MXN",
@@ -46,7 +46,7 @@ const CORE_SUCCESS = {
   transaction_status: "Success",
   psp_response: { id: "psp-1" },
   routing: { checkout_id: "chk-1", is_route_finished: true },
-  next_action: { verify_transaction_status_url: `/transactions/v1/${PUBLIC_ID}` },
+  next_action: { verify_transaction_status_url: `/transactions/v1/${TRANSACTION_ID}` },
 };
 
 const LEGACY_ROUTER_BODY = {
@@ -502,7 +502,7 @@ describe("card payment with the flag ON", () => {
             redirect_to_url: {
               url: "https://payflow.example.com/process?token=t#session=s",
               return_url: "https://shop.example.com/done",
-              verify_transaction_status_url: `/transactions/v1/${PUBLIC_ID}`,
+              verify_transaction_status_url: `/transactions/v1/${TRANSACTION_ID}`,
             },
           },
         },
@@ -521,7 +521,7 @@ describe("card payment with the flag ON", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(JSON.parse(localStorage.getItem("verify_transaction_status_url")!)).toMatchObject({
-        url: `/transactions/v1/${PUBLIC_ID}`,
+        url: `/transactions/v1/${TRANSACTION_ID}`,
         engine: "core",
       });
       expect((window.location as any).href ?? window.location).toBe(
@@ -584,7 +584,7 @@ describe("card payment with the flag OFF", () => {
 
 describe("verify3dsTransaction of a core payment", () => {
   const STORAGE_KEY = "verify_transaction_status_url";
-  const VERIFY_PATH = `/transactions/v1/${PUBLIC_ID}`;
+  const VERIFY_PATH = `/transactions/v1/${TRANSACTION_ID}`;
 
   function storeCoreState() {
     localStorage.setItem(
