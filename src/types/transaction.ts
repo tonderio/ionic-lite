@@ -121,7 +121,7 @@ export interface CoreVerifyTransaction {
     payment?: { id: number } | null;
     checkout?: { id: string; is_route_finished?: boolean } | null;
     checkout_id?: string | null;
-    transaction_type?: "Payment" | "Refund";
+    transaction_type?: "PAYMENT" | "REFUND";
     card_brand?: string | null;
     transaction_reference?: string | null;
     number_of_payment_attempts?: number | null;

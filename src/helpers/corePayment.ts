@@ -170,7 +170,7 @@ const FIRST_PARTY_TRANSACTION_FIELDS = [
 const nullable = <T, R>(value: T | null | undefined, map: (value: T) => R): R | null | undefined =>
   value == null ? (value as null | undefined) : map(value);
 
-const TRANSACTION_TYPES: Record<string, string> = { payment: "Payment", refund: "Refund" };
+const TRANSACTION_TYPES: Record<string, string> = { payment: "PAYMENT", refund: "REFUND" };
 
 /**
  * Rebuilds the transaction object the monolith's verify answered, from the core's

@@ -459,7 +459,7 @@ describe("rebuildVerifyTransaction", () => {
       modified: "2026-11-18T10:00:05Z",
       metadata: { order: "1" },
       is_apm: false,
-      transaction_type: "Payment",
+      transaction_type: "PAYMENT",
       payment: { id: 5001 },
       checkout: { id: "0198f3a2-7c1e-7b3a-9d2e-5f1a2b3c4d5e", is_route_finished: true },
       checkout_id: "0198f3a2-7c1e-7b3a-9d2e-5f1a2b3c4d5e",
@@ -568,7 +568,7 @@ describe("rebuildVerifyTransaction", () => {
 
   it("defaults provider to tonder and maps a refund's operation_type", () => {
     const result = rebuildVerifyTransaction({ ...CORE_GET, provider: undefined, operation_type: "refund" });
-    expect(result).toMatchObject({ provider: "tonder", transaction_type: "Refund" });
+    expect(result).toMatchObject({ provider: "tonder", transaction_type: "REFUND" });
     expect(result).not.toHaveProperty("operation_date");
     expect(rebuildVerifyTransaction({ ...CORE_GET, operation_type: "withdrawal" })).not.toHaveProperty("transaction_type");
   });
