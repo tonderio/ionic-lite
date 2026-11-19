@@ -318,6 +318,14 @@ describe("rebuildCheckoutResult", () => {
     });
   });
 
+  it("sends the Guardian block's amount as a JSON number, 0 when it is missing, as the router did", () => {
+    const blocked = { ...DECLINE, decline_code: "FH01", routing: { checkout_id: "chk-1", is_route_finished: true } };
+
+    expect(rebuildCheckoutResult(200, { ...blocked, amount: "100.0000" }, CTX).body.amount).toBe(100);
+    expect(rebuildCheckoutResult(200, { ...blocked, amount: undefined }, CTX).body.amount).toBe(0);
+    expect(rebuildCheckoutResult(200, { ...blocked, amount: "0.0000" }, CTX).body.amount).toBe(0);
+  });
+
   it.each(["Success", "Authorized", "Pending", "Processing"])(
     "resolves a '%s' payment",
     (status) => {

@@ -131,7 +131,7 @@ function guardianBody(transaction: ICoreTransactionResponse) {
     transaction_id: transaction.transaction_id,
     payment_id: transaction.payment_id,
     provider: transaction.provider,
-    amount: transaction.amount,
+    amount: Number(transaction.amount) || 0,
     currency: transaction.currency,
     psp_response: transaction.psp_response,
     decline_code: transaction.decline_code,
