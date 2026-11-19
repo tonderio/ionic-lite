@@ -110,13 +110,11 @@ export interface CoreVerifyTransaction {
     transaction_status: string;
     provider: string;
     is_apm: false;
-    // The payments API answers these on every read; they are optional here only because
-    // a malformed answer would leave them undefined.
-    amount?: string | number;
-    currency?: { code?: string };
-    currency_code?: string;
-    created?: string;
-    modified?: string;
+    amount?: string | number | null;
+    currency?: { code: string } | null;
+    currency_code?: string | null;
+    created?: string | null;
+    modified?: string | null;
     id?: number | string | null;
     metadata?: Record<string, any> | null;
     response?: any;

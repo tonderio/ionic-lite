@@ -534,6 +534,30 @@ describe("rebuildVerifyTransaction", () => {
     }
   });
 
+  it("keeps a null currency, amount and dates null and leaves absent ones absent", () => {
+    const nulls = rebuildVerifyTransaction({
+      id: PUBLIC_ID,
+      status: "Failed",
+      currency: null,
+      amount: null,
+      created_at: null,
+      updated_at: null,
+    } as any);
+    expect(nulls).toMatchObject({
+      currency: null,
+      currency_code: null,
+      amount: null,
+      created: null,
+      modified: null,
+    });
+
+    const absent = rebuildVerifyTransaction({ id: PUBLIC_ID, status: "Failed" });
+    for (const key of ["currency", "currency_code", "amount", "created", "modified"]) {
+      expect(absent).not.toHaveProperty(key);
+    }
+    expect(absent).toMatchObject({ status: "Failed", transaction_status: "Failed", provider: "tonder", is_apm: false });
+  });
+
   it("defaults provider to tonder and maps a refund's operation_type", () => {
     const result = rebuildVerifyTransaction({ ...CORE_GET, provider: undefined, operation_type: "refund" });
     expect(result).toMatchObject({ provider: "tonder", transaction_type: "Refund" });
