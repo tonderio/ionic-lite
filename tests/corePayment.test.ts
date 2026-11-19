@@ -1,7 +1,9 @@
 import {
   buildCoreProcessBody,
   rebuildCheckoutResult,
+  rebuildVerifyTransaction,
 } from "../src/helpers/corePayment";
+import type { CoreVerifyTransaction, ITransaction } from "../src/types/transaction";
 
 const CORE_BASE = "https://api-stage.tonder.io";
 const CTX = { coreBaseUrl: CORE_BASE };
@@ -44,7 +46,7 @@ function baseInput(overrides: Record<string, unknown> = {}) {
 }
 
 describe("buildCoreProcessBody", () => {
-  it("maps a new card to the vault field tokens, without the vault record id", () => {
+  it("maps a new card to the vault field tokens and sends the record id as skyflow_id, never as token", () => {
     const body = buildCoreProcessBody(baseInput());
 
     expect(body.payment_method).toEqual({
@@ -54,13 +56,21 @@ describe("buildCoreProcessBody", () => {
       expiration_month: "tok-month",
       expiration_year: "tok-year",
       cardholder_name: "tok-name",
+      skyflow_id: "sf-1",
     });
+    expect(body.payment_method).not.toHaveProperty("token");
+  });
+
+  it("sends no skyflow_id for a new card whose record id is unknown", () => {
+    const { skyflow_id, ...withoutId } = NEW_CARD;
+    expect(buildCoreProcessBody(baseInput({ card: withoutId })).payment_method).not.toHaveProperty("skyflow_id");
   });
 
   it("maps a saved card to its vault record id as the token", () => {
     const body = buildCoreProcessBody(baseInput({ card: { skyflow_id: "sf-9" } }));
 
     expect(body.payment_method).toEqual({ type: "CARD", token: "sf-9" });
+    expect(body.payment_method).not.toHaveProperty("skyflow_id");
   });
 
   it("sends the payment the way the legacy flow described it", () => {
@@ -308,6 +318,14 @@ describe("rebuildCheckoutResult", () => {
     });
   });
 
+  it("sends the Guardian block's amount as a JSON number, 0 when it is missing, as the router did", () => {
+    const blocked = { ...DECLINE, decline_code: "FH01", routing: { checkout_id: "chk-1", is_route_finished: true } };
+
+    expect(rebuildCheckoutResult(200, { ...blocked, amount: "100.0000" }, CTX).body.amount).toBe(100);
+    expect(rebuildCheckoutResult(200, { ...blocked, amount: undefined }, CTX).body.amount).toBe(0);
+    expect(rebuildCheckoutResult(200, { ...blocked, amount: "0.0000" }, CTX).body.amount).toBe(0);
+  });
+
   it.each(["Success", "Authorized", "Pending", "Processing"])(
     "resolves a '%s' payment",
     (status) => {
@@ -389,5 +407,198 @@ describe("rebuildCheckoutResult", () => {
       psp_response: [],
       is_route_finished: true,
     });
+  });
+});
+
+describe("rebuildVerifyTransaction", () => {
+  it("is typed as the reduced object, which is not an ITransaction", () => {
+    const verified: CoreVerifyTransaction = rebuildVerifyTransaction({
+      id: PUBLIC_ID,
+      status: "Success",
+    });
+    // @ts-expect-error country, payment_method and the fees are absent, so it is not a full ITransaction
+    const full: ITransaction = verified;
+    expect(full).toBeDefined();
+  });
+
+  const CORE_GET = {
+    id: PUBLIC_ID,
+    operation_type: "payment",
+    status: "Success",
+    amount: "100.0000",
+    currency: "MXN",
+    created_at: "2026-11-18T10:00:00Z",
+    updated_at: "2026-11-18T10:00:05Z",
+    client_reference: "order-1",
+    metadata: { order: "1" },
+    provider: "tonder",
+    payment_method_type: "CARD",
+    payment_id: 5001,
+    transaction_id: "881",
+    acq: "kushki",
+    transaction_status: "Success",
+    psp_response: { code: "000" },
+    routing: {
+      checkout_id: "0198f3a2-7c1e-7b3a-9d2e-5f1a2b3c4d5e",
+      is_route_finished: true,
+      decline_type: null,
+      rejected_psp_responses: [],
+    },
+  };
+
+  it("builds the monolith transaction object from the core answer for a Success", () => {
+    expect(rebuildVerifyTransaction(CORE_GET)).toEqual({
+      id: 881,
+      status: "Success",
+      transaction_status: "Success",
+      provider: "tonder",
+      amount: "100.0000",
+      currency: { code: "MXN" },
+      currency_code: "MXN",
+      created: "2026-11-18T10:00:00Z",
+      modified: "2026-11-18T10:00:05Z",
+      metadata: { order: "1" },
+      is_apm: false,
+      transaction_type: "Payment",
+      payment: { id: 5001 },
+      checkout: { id: "0198f3a2-7c1e-7b3a-9d2e-5f1a2b3c4d5e", is_route_finished: true },
+      checkout_id: "0198f3a2-7c1e-7b3a-9d2e-5f1a2b3c4d5e",
+      response: { code: "000" },
+    });
+  });
+
+  it("keeps the core status as both status and transaction_status for a Declined payment", () => {
+    const result = rebuildVerifyTransaction({
+      ...CORE_GET,
+      status: "Declined",
+      transaction_status: "Declined",
+      decline_code: "GS01",
+      decline_reason: "Declined",
+    });
+    expect(result).toMatchObject({ status: "Declined", transaction_status: "Declined", id: 881 });
+    expect(result).not.toHaveProperty("next_action");
+    expect(result).not.toHaveProperty("actions");
+    expect(result).not.toHaveProperty("is_route_finished");
+  });
+
+  it("uses the core's own status for a Pending payment, not the attempt's result", () => {
+    const result = rebuildVerifyTransaction({
+      ...CORE_GET,
+      status: "Pending",
+      transaction_status: "Success",
+      next_action: { redirect_to_url: { url: "https://payflow.example.com/process" } },
+    });
+    expect(result).toMatchObject({ status: "Pending", transaction_status: "Pending" });
+    expect(result).not.toHaveProperty("next_action");
+  });
+
+  it("maps the core's first-party transaction fields 1:1, keeping a null as null", () => {
+    const result = rebuildVerifyTransaction({
+      ...CORE_GET,
+      card_brand: "VISA",
+      transaction_reference: "ref-1",
+      number_of_payment_attempts: 2,
+      number_of_installments: 1,
+      three_d_secure: { eci: "05" },
+      reason: null,
+      operation_date: "2026-11-18T10:00:02Z",
+      decline: null,
+    } as any);
+    expect(result).toMatchObject({
+      card_brand: "VISA",
+      transaction_reference: "ref-1",
+      number_of_payment_attempts: 2,
+      number_of_installments: 1,
+      three_d_secure: { eci: "05" },
+      operation_date: "2026-11-18T10:00:02Z",
+    });
+    expect(result.reason).toBeNull();
+    expect(result.decline).toBeNull();
+    expect(rebuildVerifyTransaction({ ...CORE_GET, decline: { code: "05" } } as any).decline).toEqual({ code: "05" });
+  });
+
+  it("keeps a null the core answers as null and omits only the keys it lacks", () => {
+    const result = rebuildVerifyTransaction({
+      id: PUBLIC_ID,
+      operation_type: "payment",
+      status: "Failed",
+      metadata: null,
+      psp_response: null,
+      transaction_id: null,
+      payment_id: null,
+      routing: { checkout_id: null, is_route_finished: true },
+    } as any);
+    expect(result).toMatchObject({
+      metadata: null,
+      response: null,
+      id: null,
+      payment: null,
+      checkout: null,
+      checkout_id: null,
+    });
+    const lacking = rebuildVerifyTransaction({ id: PUBLIC_ID, status: "Failed" });
+    for (const key of ["metadata", "response", "id", "payment", "checkout", "checkout_id"]) {
+      expect(lacking).not.toHaveProperty(key);
+    }
+  });
+
+  it("keeps a null currency, amount and dates null and leaves absent ones absent", () => {
+    const nulls = rebuildVerifyTransaction({
+      id: PUBLIC_ID,
+      status: "Failed",
+      currency: null,
+      amount: null,
+      created_at: null,
+      updated_at: null,
+    } as any);
+    expect(nulls).toMatchObject({
+      currency: null,
+      currency_code: null,
+      amount: null,
+      created: null,
+      modified: null,
+    });
+
+    const absent = rebuildVerifyTransaction({ id: PUBLIC_ID, status: "Failed" });
+    for (const key of ["currency", "currency_code", "amount", "created", "modified"]) {
+      expect(absent).not.toHaveProperty(key);
+    }
+    expect(absent).toMatchObject({ status: "Failed", transaction_status: "Failed", provider: "tonder", is_apm: false });
+  });
+
+  it("defaults provider to tonder and maps a refund's operation_type", () => {
+    const result = rebuildVerifyTransaction({ ...CORE_GET, provider: undefined, operation_type: "refund" });
+    expect(result).toMatchObject({ provider: "tonder", transaction_type: "Refund" });
+    expect(result).not.toHaveProperty("operation_date");
+    expect(rebuildVerifyTransaction({ ...CORE_GET, operation_type: "withdrawal" })).not.toHaveProperty("transaction_type");
+  });
+
+  it("leaves out what the core does not hold instead of inventing it", () => {
+    const result = rebuildVerifyTransaction({
+      id: PUBLIC_ID,
+      operation_type: "payment",
+      status: "Failed",
+      amount: "5.0000",
+      currency: "MXN",
+      created_at: "2026-11-18T10:00:00Z",
+      updated_at: "2026-11-18T10:00:00Z",
+    });
+    expect(Object.keys(result).sort()).toEqual(
+      [
+        "amount",
+        "created",
+        "currency",
+        "currency_code",
+        "is_apm",
+        "modified",
+        "provider",
+        "status",
+        "transaction_status",
+        "transaction_type",
+      ].sort(),
+    );
+    for (const absent of ["fee_amount", "guardian_status", "wallet", "card_brand", "payment", "checkout", "id"]) {
+      expect(result).not.toHaveProperty(absent);
+    }
   });
 });

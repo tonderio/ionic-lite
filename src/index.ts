@@ -12,6 +12,8 @@ export type {
     RevealableCardField,
 } from './types/card'
 
+export type { ITransaction, CoreVerifyTransaction } from './types/transaction'
+
 export {
     LiteCheckout,
     BaseInlineCheckout,

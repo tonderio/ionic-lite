@@ -31,7 +31,7 @@ import {ICustomer} from "../types/customer";
 import {ICardFields, IItem, IProcessPaymentRequest, IStartCheckoutResponse} from "../types/checkout";
 import {ICustomerCardsResponse, ISaveCardInternalResponse, ISaveCardSkyflowRequest} from "../types/card";
 import {IPaymentMethodResponse} from "../types/paymentMethod";
-import {ITransaction} from "../types/transaction";
+import {CoreVerifyTransaction, ITransaction} from "../types/transaction";
 import {GetSecureTokenResponse} from "../types/responses";
 import {getSecureToken} from "../data/tokenApi";
 import {ErrorKeyEnum} from "../shared/enum/ErrorKeyEnum";
@@ -42,7 +42,7 @@ import { getApiBaseUrl, getTelemetryEndpoint } from "../shared/constants/apiEndp
 import { SDK_INFO } from "../helpers/sdkInfo";
 import { AppError, buildPublicAppError, buildPublicAppErrorFromAnswer } from "../shared/utils/appError";
 import { createCorePayment, isOperationsDisabled, isOperationsDisabledAnswer } from "../data/coreApi";
-import { buildCoreProcessBody, describeCoreRefusal, newRequestId, rebuildCheckoutResult } from "../helpers/corePayment";
+import { buildCoreProcessBody, describeCoreRefusal, newRequestId, rebuildCheckoutResult, rebuildVerifyTransaction } from "../helpers/corePayment";
 type CheckoutRequest = {
   card?: Record<string, any>;
   payment_method?: string;
@@ -112,8 +112,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
       apiKey: this.apiKeyTonder,
       baseUrl: this.baseUrl,
       coreBaseUrl: this.coreBaseUrl,
-      buildCoreResult: (transaction) =>
-        rebuildCheckoutResult(200, transaction, { coreBaseUrl: this.coreBaseUrl }).body,
+      buildCoreResult: rebuildVerifyTransaction,
       redirectOnComplete: this.customization.redirectOnComplete,
       tdsIframeId: tdsIframeId,
       tonderPayButtonId: tonderPayButtonId,
@@ -181,12 +180,13 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
 
-  async verify3dsTransaction(): Promise<ITransaction | IStartCheckoutResponse | void> {
+  async verify3dsTransaction(): Promise<ITransaction | CoreVerifyTransaction | IStartCheckoutResponse | void> {
     const engine = this.process3ds.getStoredEngine();
     const result3ds = await this.process3ds.verifyTransactionStatus();
     if (engine === "core") {
-      // The core continues its own route after the challenge, so nothing is resumed. A still-open
-      // payment may carry the challenge the buyer just came back from: it is never followed again.
+      // The core continues its own route after the challenge, so nothing is resumed. The result is the
+      // transaction object the monolith's verify answers; it carries no challenge, so a still-open
+      // payment never sends the buyer back to the one they just came back from.
       this.process3ds.setPayload(result3ds);
       return result3ds;
     }

@@ -332,6 +332,32 @@ describe("3DS state keeps the engine of its payment", () => {
 });
 
 describe("verify3dsTransaction after the buyer returns", () => {
+  it("resolves a core payment with the monolith's transaction object, not the checkout-router body", async () => {
+    localStorage.clear();
+    const fetchMock = jest.fn().mockResolvedValue(
+      jsonResponse({
+        id: "x",
+        operation_type: "payment",
+        status: "Success",
+        amount: "10.0000",
+        currency: "MXN",
+        created_at: "2026-11-18T10:00:00Z",
+        updated_at: "2026-11-18T10:00:01Z",
+        transaction_id: "7",
+      }),
+    );
+    (global as any).fetch = fetchMock;
+    storeItem({ url: CORE_VERIFY_PATH, engine: "core" });
+
+    const result: any = await new LiteCheckout({ mode: "stage", apiKey: API_KEY }).verify3dsTransaction();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ id: 7, status: "Success", transaction_status: "Success", currency_code: "MXN" });
+    for (const body of ["actions", "is_route_finished", "message", "next_action", "payment_id", "transaction_id"]) {
+      expect(result).not.toHaveProperty(body);
+    }
+  });
+
   let fetchMock: jest.Mock;
   let checkout: LiteCheckout;
 
@@ -362,7 +388,8 @@ describe("verify3dsTransaction after the buyer returns", () => {
     try {
       const result = await checkout.verify3dsTransaction();
 
-      expect(result).toMatchObject({ next_action: open.next_action });
+      expect(result).toMatchObject({ status: "Pending", transaction_status: "Pending" });
+      expect(result).not.toHaveProperty("next_action");
       expect(window.location).toBe(location);
       expect(location.href).toBe("https://localhost/");
       expect(stored()).toMatchObject({ url: CORE_VERIFY_PATH, engine: "core" });

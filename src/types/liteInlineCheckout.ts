@@ -6,7 +6,7 @@ import {
 } from "./card";
 import { IPaymentMethod } from "./paymentMethod";
 import { IProcessPaymentRequest, IStartCheckoutResponse } from "./checkout";
-import { ITransaction } from "./transaction";
+import { CoreVerifyTransaction, ITransaction } from "./transaction";
 import { APM } from "./commons";
 import { ErrorResponse } from "../classes/errorResponse";
 import {
@@ -60,10 +60,10 @@ export interface ILiteCheckout {
 
   /**
    * Verifies the 3DS transaction status.
-   * @returns {Promise<import("./index").ITransaction | import("./index").IStartCheckoutResponse | void>} The result of the 3DS verification and checkout resumption.
+   * @returns {Promise<import("./index").ITransaction | import("./index").CoreVerifyTransaction | import("./index").IStartCheckoutResponse | void>} The result of the 3DS verification and checkout resumption.
    * @public
    */
-  verify3dsTransaction(): Promise<ITransaction | IStartCheckoutResponse | void>;
+  verify3dsTransaction(): Promise<ITransaction | CoreVerifyTransaction | IStartCheckoutResponse | void>;
 
   /**
    * Retrieves the list of cards associated with a customer.

@@ -15,9 +15,21 @@ export interface ICoreRouting {
  */
 export interface ICoreTransactionResponse {
     id: string;
+    operation_type?: string;
     status: string;
     amount?: number | string;
     currency?: string;
+    created_at?: string;
+    updated_at?: string;
+    metadata?: Record<string, any> | null;
+    card_brand?: string | null;
+    transaction_reference?: string | null;
+    number_of_payment_attempts?: number | null;
+    number_of_installments?: number | null;
+    three_d_secure?: Record<string, any> | null;
+    reason?: string | null;
+    operation_date?: string;
+    decline?: Record<string, any> | null;
     provider?: string | null;
     next_action?: Record<string, any>;
     decline_code?: string;
