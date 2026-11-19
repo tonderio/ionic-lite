@@ -86,7 +86,8 @@ function legacyId(id: string | undefined): string | number | undefined {
   return id !== undefined && /^\d+$/.test(id) ? Number(id) : id;
 }
 
-// A core payment is verified and refunded through the core, by the payment's public id.
+// A core payment is verified and refunded through the core, by the id the core answers: the
+// transaction's (one per attempt with a method), not the payment's, which payment_id names.
 function buildActions(transaction: ICoreTransactionResponse, ctx: CoreResultContext) {
   return [
     {

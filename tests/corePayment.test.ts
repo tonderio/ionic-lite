@@ -7,7 +7,7 @@ import type { CoreVerifyTransaction, ITransaction } from "../src/types/transacti
 
 const CORE_BASE = "https://api-stage.tonder.io";
 const CTX = { coreBaseUrl: CORE_BASE };
-const PUBLIC_ID = "0192b8a0-0000-7000-8000-000000000001";
+const TRANSACTION_ID = "0192b8a0-0000-7000-8000-000000000001";
 
 const ITEMS = [
   {
@@ -118,7 +118,7 @@ describe("buildCoreProcessBody", () => {
 });
 
 const SUCCESS = {
-  id: PUBLIC_ID,
+  id: TRANSACTION_ID,
   status: "Success",
   amount: 100,
   currency: "MXN",
@@ -129,22 +129,22 @@ const SUCCESS = {
   transaction_status: "Success",
   psp_response: { id: "psp-1" },
   routing: { checkout_id: "chk-1", is_route_finished: true },
-  next_action: { verify_transaction_status_url: `/transactions/v1/${PUBLIC_ID}` },
+  next_action: { verify_transaction_status_url: `/transactions/v1/${TRANSACTION_ID}` },
 };
 
 const VERIFY_ACTION = {
   name: "verify_transaction_status",
-  url: `${CORE_BASE}/transactions/v1/${PUBLIC_ID}`,
+  url: `${CORE_BASE}/transactions/v1/${TRANSACTION_ID}`,
   method: "GET",
 };
 
 describe("rebuildCheckoutResult", () => {
-  it("points the verify action of a core payment at the core's GET by public id", () => {
+  it("points the verify action of a core payment at the core's GET by transaction id", () => {
     const { actions } = rebuildCheckoutResult(201, SUCCESS, CTX).body;
 
     expect(actions[0]).toEqual({
       name: "verify_transaction_status",
-      url: `${CORE_BASE}/transactions/v1/${PUBLIC_ID}`,
+      url: `${CORE_BASE}/transactions/v1/${TRANSACTION_ID}`,
       method: "GET",
     });
   });
@@ -170,7 +170,7 @@ describe("rebuildCheckoutResult", () => {
           name: "refund_transaction",
           url: `${CORE_BASE}/transactions/v1/process`,
           method: "POST",
-          body: { operation_type: "refund", original_transaction_id: PUBLIC_ID },
+          body: { operation_type: "refund", original_transaction_id: TRANSACTION_ID },
         },
       ],
     });
@@ -197,7 +197,7 @@ describe("rebuildCheckoutResult", () => {
       redirect_to_url: {
         url: "https://payflow.example.com/process?token=t#session=s",
         return_url: "https://shop.example.com/done",
-        verify_transaction_status_url: `/transactions/v1/${PUBLIC_ID}`,
+        verify_transaction_status_url: `/transactions/v1/${TRANSACTION_ID}`,
       },
     };
 
@@ -252,7 +252,7 @@ describe("rebuildCheckoutResult", () => {
           name: "refund_transaction",
           url: `${CORE_BASE}/transactions/v1/process`,
           method: "POST",
-          body: { operation_type: "refund", original_transaction_id: PUBLIC_ID },
+          body: { operation_type: "refund", original_transaction_id: TRANSACTION_ID },
         },
       ],
     });
@@ -413,7 +413,7 @@ describe("rebuildCheckoutResult", () => {
 describe("rebuildVerifyTransaction", () => {
   it("is typed as the reduced object, which is not an ITransaction", () => {
     const verified: CoreVerifyTransaction = rebuildVerifyTransaction({
-      id: PUBLIC_ID,
+      id: TRANSACTION_ID,
       status: "Success",
     });
     // @ts-expect-error country, payment_method and the fees are absent, so it is not a full ITransaction
@@ -422,7 +422,7 @@ describe("rebuildVerifyTransaction", () => {
   });
 
   const CORE_GET = {
-    id: PUBLIC_ID,
+    id: TRANSACTION_ID,
     operation_type: "payment",
     status: "Success",
     amount: "100.0000",
@@ -519,7 +519,7 @@ describe("rebuildVerifyTransaction", () => {
 
   it("keeps a null the core answers as null and omits only the keys it lacks", () => {
     const result = rebuildVerifyTransaction({
-      id: PUBLIC_ID,
+      id: TRANSACTION_ID,
       operation_type: "payment",
       status: "Failed",
       metadata: null,
@@ -536,7 +536,7 @@ describe("rebuildVerifyTransaction", () => {
       checkout: null,
       checkout_id: null,
     });
-    const lacking = rebuildVerifyTransaction({ id: PUBLIC_ID, status: "Failed" });
+    const lacking = rebuildVerifyTransaction({ id: TRANSACTION_ID, status: "Failed" });
     for (const key of ["metadata", "response", "id", "payment", "checkout", "checkout_id"]) {
       expect(lacking).not.toHaveProperty(key);
     }
@@ -544,7 +544,7 @@ describe("rebuildVerifyTransaction", () => {
 
   it("keeps a null currency, amount and dates null and leaves absent ones absent", () => {
     const nulls = rebuildVerifyTransaction({
-      id: PUBLIC_ID,
+      id: TRANSACTION_ID,
       status: "Failed",
       currency: null,
       amount: null,
@@ -559,7 +559,7 @@ describe("rebuildVerifyTransaction", () => {
       modified: null,
     });
 
-    const absent = rebuildVerifyTransaction({ id: PUBLIC_ID, status: "Failed" });
+    const absent = rebuildVerifyTransaction({ id: TRANSACTION_ID, status: "Failed" });
     for (const key of ["currency", "currency_code", "amount", "created", "modified"]) {
       expect(absent).not.toHaveProperty(key);
     }
@@ -575,7 +575,7 @@ describe("rebuildVerifyTransaction", () => {
 
   it("leaves out what the core does not hold instead of inventing it", () => {
     const result = rebuildVerifyTransaction({
-      id: PUBLIC_ID,
+      id: TRANSACTION_ID,
       operation_type: "payment",
       status: "Failed",
       amount: "5.0000",
