@@ -202,6 +202,7 @@ describe("card payment with the flag ON", () => {
       expiration_month: "tok-month",
       expiration_year: "tok-year",
       cardholder_name: "tok-name",
+      skyflow_id: "sf-new",
     });
   });
 
@@ -605,7 +606,7 @@ describe("verify3dsTransaction of a core payment", () => {
 
   beforeEach(() => localStorage.clear());
 
-  it("reads the core once, resumes nothing and answers the rebuilt checkout-router body", async () => {
+  it("reads the core once, resumes nothing and answers the monolith transaction object", async () => {
     storeCoreState();
     const { mock, checkout } = await startedCheckout({
       status: 200,
@@ -630,27 +631,26 @@ describe("verify3dsTransaction of a core payment", () => {
     expect(callsTo(mock, `${CORE}${VERIFY_PATH}`)).toHaveLength(1);
     expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(0);
     expect(result).toMatchObject({
-      status: "404",
-      message: "Do not honor",
-      checkout_id: "chk-1",
-      is_route_finished: true,
+      status: "Declined",
       transaction_status: "Declined",
-      decline_code: "05",
-      psp_response: [{ id: "r1" }, { id: "r2" }],
+      checkout_id: "chk-1",
+      checkout: { id: "chk-1", is_route_finished: true },
     });
+    for (const routerField of ["message", "is_route_finished", "decline_code", "psp_response", "actions"]) {
+      expect(result).not.toHaveProperty(routerField);
+    }
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it("answers an approved payment with the same body payment() resolves with", async () => {
+  it("answers an approved payment with the monolith transaction object, not the body payment() resolves with", async () => {
     storeCoreState();
     const { checkout } = await startedCheckout({ status: 200, body: CORE_SUCCESS });
 
     const verified = await checkout.verify3dsTransaction();
 
-    const { checkout: other } = buildCheckout();
-    installFetch({ flag: true });
-    const paid = await other.payment(paymentData());
-    expect(verified).toEqual(paid);
+    expect(verified).toMatchObject({ status: "Success", transaction_status: "Success" });
+    expect(verified).not.toHaveProperty("actions");
+    expect(verified).not.toHaveProperty("next_action");
   });
 
   it("keeps the 3DS state while the core payment is not final", async () => {

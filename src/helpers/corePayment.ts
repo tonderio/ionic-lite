@@ -1,6 +1,7 @@
 import { get } from "./get";
 import { IItem } from "../types/checkout";
 import { ICoreTransactionResponse } from "../types/core";
+import { CoreVerifyTransaction } from "../types/transaction";
 
 const GUARDIAN_DECLINE_CODE = "FH01";
 
@@ -57,6 +58,8 @@ export function buildCoreProcessBody(input: CoreCheckoutInput) {
     ? {
         type: "CARD",
         ...Object.fromEntries(CARD_FIELDS.map((field) => [field, card[field]])),
+        // Only the core's BIN lookup reads it; the field tokens carry the payment.
+        ...(card.skyflow_id ? { skyflow_id: card.skyflow_id } : {}),
       }
     : { type: "CARD", token: card.skyflow_id };
 
@@ -148,6 +151,64 @@ function approvedBody(transaction: ICoreTransactionResponse, ctx: CoreResultCont
     next_action: transaction.next_action ?? {},
     psp_response: transaction.psp_response,
     actions: buildActions(transaction, ctx),
+  };
+}
+
+// What the core answers with the monolith's own names and values: a key it holds is copied
+// as given, a null included, because the monolith returns null there too.
+const FIRST_PARTY_TRANSACTION_FIELDS = [
+  "card_brand",
+  "transaction_reference",
+  "number_of_payment_attempts",
+  "number_of_installments",
+  "three_d_secure",
+  "reason",
+  "operation_date",
+  "decline",
+] as const;
+
+const nullable = <T, R>(value: T | null | undefined, map: (value: T) => R): R | null | undefined =>
+  value == null ? (value as null | undefined) : map(value);
+
+const TRANSACTION_TYPES: Record<string, string> = { payment: "Payment", refund: "Refund" };
+
+/**
+ * Rebuilds the transaction object the monolith's verify answered, from the core's
+ * `GET /transactions/v1/{id}` answer. Only the fields the core holds are set, with the monolith's
+ * names, types and values; fees, rates, guardian_*, wallet, card data and the like are absent,
+ * never invented. `status` and `transaction_status` both hold the payment's own status; `is_apm` is false because only card payments go through the core.
+ */
+export function rebuildVerifyTransaction(transaction: ICoreTransactionResponse): CoreVerifyTransaction {
+  const routing = transaction.routing;
+  const checkoutId = routing?.checkout_id;
+  // A key the core answers is mapped as it is, a null included (the monolith returns the stored
+  // null); a key it lacks stays absent.
+  const optional: Record<string, any> = {
+    id: nullable(transaction.transaction_id, legacyId),
+    metadata: transaction.metadata,
+    response: transaction.psp_response,
+    payment: nullable(transaction.payment_id, (id) => ({ id })),
+    checkout: nullable(checkoutId, (id) => ({ id, is_route_finished: routing?.is_route_finished })),
+    checkout_id: checkoutId,
+    transaction_type: TRANSACTION_TYPES[transaction.operation_type ?? ""],
+  };
+  return {
+    status: transaction.status,
+    transaction_status: transaction.status,
+    amount: transaction.amount,
+    currency: { code: transaction.currency },
+    currency_code: transaction.currency,
+    created: transaction.created_at,
+    modified: transaction.updated_at,
+    provider: transaction.provider || "tonder",
+    is_apm: false,
+    ...Object.fromEntries(Object.entries(optional).filter(([, value]) => value !== undefined)),
+    ...Object.fromEntries(
+      FIRST_PARTY_TRANSACTION_FIELDS.filter((field) => field in transaction).map((field) => [
+        field,
+        (transaction as Record<string, any>)[field],
+      ]),
+    ),
   };
 }
 

@@ -99,3 +99,37 @@ export interface ITransaction {
     };
     issuing_country?: null | string;
 }
+
+/**
+ * What `verify3dsTransaction()` resolves with for a payment charged by the payments API: the
+ * legacy transaction object reduced to the fields that API holds, with the legacy names and
+ * values. Everything else of `ITransaction` (country, fees, payment_method, checkout_data...) is absent.
+ */
+export interface CoreVerifyTransaction {
+    status: string;
+    transaction_status: string;
+    provider: string;
+    is_apm: false;
+    // The payments API answers these on every read; they are optional here only because
+    // a malformed answer would leave them undefined.
+    amount?: string | number;
+    currency?: { code?: string };
+    currency_code?: string;
+    created?: string;
+    modified?: string;
+    id?: number | string | null;
+    metadata?: Record<string, any> | null;
+    response?: any;
+    payment?: { id: number } | null;
+    checkout?: { id: string; is_route_finished?: boolean } | null;
+    checkout_id?: string | null;
+    transaction_type?: "Payment" | "Refund";
+    card_brand?: string | null;
+    transaction_reference?: string | null;
+    number_of_payment_attempts?: number | null;
+    number_of_installments?: number | null;
+    three_d_secure?: Record<string, any> | null;
+    reason?: string | null;
+    operation_date?: string;
+    decline?: Record<string, any> | null;
+}
