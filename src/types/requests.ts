@@ -79,7 +79,7 @@ export type RegisterCustomerCardRequest = {
 }
 
 export type TokensSkyflowRequest = {
-    baseUrl: string;
+    coreBaseUrl: string;
     apiKey: string;
     vault_id: string,
     vault_url: string,

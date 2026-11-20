@@ -32,7 +32,7 @@ import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
  * Use `mountCardFields()` to render Skyflow Elements and collect card data securely.
  */
 export async function getSkyflowTokens({
-  baseUrl,
+  coreBaseUrl,
   apiKey,
   vault_id,
   vault_url,
@@ -41,7 +41,7 @@ export async function getSkyflowTokens({
   const skyflow = Skyflow.init({
     vaultID: vault_id,
     vaultURL: vault_url,
-    getBearerToken: async () => await getVaultToken(baseUrl, apiKey),
+    getBearerToken: async () => await getVaultToken(coreBaseUrl, apiKey),
     options: {
       logLevel: Skyflow.LogLevel.ERROR,
       env: Skyflow.Env.DEV, // ⚠️ This should be Env.PROD, but currently it cannot be changed because getSkyflowTokens must be deprecated first, since .setValue does not work in PROD.
@@ -132,7 +132,7 @@ async function getFields(
 }
 
 export async function initSkyflowInstance({
-  baseUrl,
+  coreBaseUrl,
   apiKey,
   vault_id,
   vault_url,
@@ -142,7 +142,7 @@ export async function initSkyflowInstance({
   return Skyflow.init({
     vaultID: vault_id,
     vaultURL: vault_url,
-    getBearerToken: async () => await getVaultToken(baseUrl, apiKey),
+    getBearerToken: async () => await getVaultToken(coreBaseUrl, apiKey),
     options: {
       logLevel: Skyflow.LogLevel.ERROR,
       env: skyflowEnv,

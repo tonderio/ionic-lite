@@ -1,5 +1,6 @@
 import { ThreeDSHandler } from "./3dsHandler";
 import { fetchBusiness } from "../data/businessApi";
+import { ISupportTarget } from "../types/core";
 import { injectMercadoPagoSecurity } from "../helpers/mercadopago";
 import { TONDER_URL_BY_MODE } from "../shared/constants/tonderUrl";
 import {
@@ -284,11 +285,20 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     );
   }
 
+  // Customer and saved cards follow the merchant's flag and always share one engine: the
+  // customer's token and the secure token are only valid where they were issued.
+  protected _supportTarget(): ISupportTarget {
+    return this.merchantData?.core_payments_enabled === true
+      ? { engine: "core", baseUrl: this.coreBaseUrl }
+      : { engine: "legacy", baseUrl: this.baseUrl };
+  }
+
   async _getCustomer(signal: AbortSignal | null = null) {
     if (!!this.#customerData) return this.#customerData!;
 
+    await this._fetchMerchantData();
     this.#customerData = await registerOrFetchCustomer(
-      this.baseUrl,
+      this._supportTarget(),
       this.apiKeyTonder,
       this.customer!,
       signal,
@@ -308,7 +318,21 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
       }
     }
     this.process3ds.setEngine("legacy");
-    return this.#legacyCheckout(request);
+    return this.#legacyCheckout(await this.#withLegacyCustomer(request));
+  }
+
+  // The legacy order takes the customer's token as `client`, and a core customer's token is
+  // not valid on the monolith: a payment that ends on the legacy flow (an alternative method,
+  // or the kill switch's retry) with the flag ON registers its customer there first.
+  async #withLegacyCustomer(request: CheckoutRequest): Promise<CheckoutRequest> {
+    if (this._supportTarget().engine !== "core") return request;
+    const customer = await registerOrFetchCustomer(
+      { engine: "legacy", baseUrl: this.baseUrl },
+      this.apiKeyTonder,
+      this.customer!,
+      this.abortController.signal,
+    );
+    return { ...request, customer };
   }
 
   // Card payments only (new, saved and Card on File: the core decides the latter by itself);
@@ -549,7 +573,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     authToken: string,
     businessId: string | number,
   ): Promise<ICustomerCardsResponse> {
-    return await fetchCustomerCards(this.baseUrl, authToken, this.secureToken, businessId);
+    return await fetchCustomerCards(this._supportTarget(), authToken, this.secureToken, businessId);
   }
 
   async _saveCustomerCard(
@@ -559,7 +583,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     appOrigin: boolean = false,
   ): Promise<ISaveCardInternalResponse> {
     return await saveCustomerCard(
-      this.baseUrl,
+      this._supportTarget(),
       authToken,
       this.secureToken,
       businessId,
@@ -574,7 +598,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     skyflowId: string,
   ): Promise<string> {
     return await removeCustomerCard(
-      this.baseUrl,
+      this._supportTarget(),
       authToken,
       this.secureToken,
       skyflowId,
@@ -582,7 +606,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     );
   }
   async _fetchCustomerPaymentMethods(): Promise<IPaymentMethodResponse> {
-    return await fetchCustomerPaymentMethods(this.baseUrl, this.apiKeyTonder);
+    return await fetchCustomerPaymentMethods(this.coreBaseUrl, this.apiKeyTonder);
   }
 
   protected _hasCardOnFileKeys(): boolean {
@@ -595,6 +619,11 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         merchantId: this.merchantData?.cardonfile_keys!.public_key!,
         apiKey: this.apiKeyTonder,
         isTestEnvironment: this.mode !== "production",
+        // The core's customer token must not be stored in the subscription: its owner is the customer's id.
+        subscriptionOwner: () =>
+          this._supportTarget().engine === "core" && this.#customerData?.id !== undefined
+            ? String(this.#customerData.id)
+            : undefined,
       });
       await this.cardOnFileInstance.initialize();
     }

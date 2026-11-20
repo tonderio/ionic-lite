@@ -22,6 +22,7 @@ Card data is collected through **Skyflow secure iframes** — raw card values ne
    - [6.3 Alternative Payment Method (APM)](#63-alternative-payment-method-apm)
    - [6.4 Payment response reference](#64-payment-response-reference)
    - [6.5 Payments API](#65-payments-api)
+   - [6.6 Support APIs: customers, saved cards, payment methods and vault token](#66-support-apis-customers-saved-cards-payment-methods-and-vault-token)
 7. [3DS Handling](#7-3ds-handling)
 8. [Managing Saved Cards](#8-managing-saved-cards)
    - [8.1 List saved cards](#81-list-saved-cards)
@@ -328,6 +329,8 @@ const { access } = await fetch(`${baseUrl}/api/secure-token/`, {
   },
 }).then(r => r.json());
 ```
+
+With `core_payments_enabled: true` for your business, your backend gets this token from Tonder's payments API (see [6.6](#66-support-apis-customers-saved-cards-payment-methods-and-vault-token)). The SDK takes the token you pass to `configureCheckout` as it is and never requests it.
 
 > **Security note:** `YOUR_SECRET_API_KEY` is a server-side credential. In production, make this request from your own backend and return only the `access` token to the frontend. Never expose your secret key in client-side code.
 
@@ -769,6 +772,23 @@ When the business configuration the SDK reads at start-up says `core_payments_en
 - If the payments API refuses to create the payment because operations are disabled (HTTP 503, `operations_disabled`), the SDK retries that payment once on the legacy flow.
 - The `id` the payments API answers is the **transaction id**: one per attempt with a method (a new card in the hosted checkout is a new transaction), while `payment_id` groups the payment. `verify3dsTransaction()` reads that transaction by `GET /transactions/v1/{id}`, and a refund takes it as `original_transaction_id` (the payments API also accepts the `payment_id` there).
 - **Declared difference:** the `refund_transaction` entry of `actions` points at the payments API refund (`POST <payments API base URL>/transactions/v1/process`, authorized with the same API key) instead of the legacy refund route, and `verify_transaction_status` points at the payments API's `GET <payments API base URL>/transactions/v1/{id}` instead of the legacy per-provider verify route (the verify of such a payment no longer answers the legacy per-provider verify body). The object `verify3dsTransaction()` resolves with keeps the legacy names, types and values for what the payments API holds: `id`, `status`, `transaction_status`, `provider`, `amount`, `currency` (only `code`), `currency_code`, `created`, `modified`, `metadata`, `is_apm`, `transaction_type`, and, when the payments API answers them, `card_brand`, `transaction_reference`, `number_of_payment_attempts`, `number_of_installments`, `three_d_secure`, `reason`, `operation_date` and `decline`, `payment` (only `id`), `checkout` (only `id` and `is_route_finished`), `checkout_id` and `response`. Fields the payments API does not hold, such as fees, rates, taxes, net amount, `guardian_*`, card data, `payment_method`, `wallet` and `incoming_request`, are absent, and `verify3dsTransaction()` no longer carries `next_action`, `actions` or the other checkout-router fields for such a payment. The action also carries a `body` hint, `{ operation_type: 'refund', original_transaction_id }`; send it with your `amount` and optional `reason`.
+
+### 6.6 Support APIs: customers, saved cards, payment methods and vault token
+
+The calls around a payment follow the same business configuration as 6.5. Nothing changes in your integration: same methods, same arguments, same resolved objects and same error codes.
+
+| Call (SDK method) | `core_payments_enabled: true` | `false` or absent |
+|---|---|---|
+| Customer (`getCustomerCards()`, `saveCustomerCard()`, `removeCustomerCard()`, `payment()`) | `POST <payments API base URL>/transactions/v1/customer`, with `Authorization: Token <apiKey>` | `POST <base URL>/api/v1/customer/`, as before |
+| Saved cards (`getCustomerCards()`, `saveCustomerCard()`, `removeCustomerCard()`) | `GET` / `POST` `<payments API base URL>/transactions/v1/cards` and `DELETE` `.../cards/<skyflow_id>`, with `Authorization: Bearer <secureToken>` and the `User-Token` header | `<base URL>/api/v1/business/<id>/cards/`, as before |
+| Payment methods (`getCustomerPaymentMethods()`) | `GET <payments API base URL>/transactions/v1/payment_methods` (same query parameters and answer), with `Authorization: Token <apiKey>` | same |
+| Vault token the card fields use | `GET <payments API base URL>/transactions/v1/vault-token`, with `Authorization: Token <apiKey>` | same |
+
+- The customer and the saved cards always go to the same place: the customer's token and the secure token are only valid where they were issued. A payment that ends on the legacy flow while the flag is `true` (an alternative payment method, or the retry after `operations_disabled`) registers its customer on the legacy API first.
+- The payments API reads your business from the credential, so its card routes carry no business id.
+- The payments API answers these calls in its own format; the SDK maps each answer onto the object it always returned (`user_id`, `cards[].fields`, `skyflow_id`, the payment methods list), so your code does not change. A refused call rejects with the same error code as before (`FETCH_CARDS_ERROR`, `SAVE_CARD_ERROR`, `REMOVE_CARD_ERROR`, `CUSTOMER_OPERATION_ERROR`, `FETCH_PAYMENT_METHODS_ERROR`, `VAULT_TOKEN_ERROR`), the HTTP status in `statusCode` and the payments API's error code (for example `card_limit_reached`) in `details.systemError`. **Declared difference:** with the flag on, `cards[].fields.cardholder_name` is absent, because the payments API does not return it.
+- The payment methods and the vault token come from the payments API whatever the flag says, as the start-up configuration does.
+- **Secure token with the flag on:** your backend gets it from the payments API (`POST /transactions/v1/secure-token`, with your secret key and the customer) or, if it still calls the legacy `/api/secure-token/`, from that route, which hands over to the payments API for your business. Pass it to `configureCheckout()` as before. Do not turn `core_payments_enabled` on for a business whose app versions still run an older SDK with saved cards: the older SDK would send that token to the legacy card routes.
 
 ---
 
@@ -1300,7 +1320,7 @@ customization: {
 | Property | Replacement | Notes |
 |----------|-------------|-------|
 | `apiKeyTonder` | `apiKey` | Renamed for clarity |
-| `baseUrlTonder` | `mode` | Replaced by environment enum (`'stage'` \| `'production'` \| ...). It still overrides the legacy API host, but the payments API host (start-up configuration and payments API) is always derived from `mode` and ignores it |
+| `baseUrlTonder` | `mode` | Replaced by environment enum (`'stage'` \| `'production'` \| ...). It still overrides the legacy API host, but the payments API host (start-up configuration, payments API, payment methods, vault token and, with the flag on, customers and saved cards) is always derived from `mode` and ignores it |
 | `signal` | (removed) | AbortController signal is no longer needed |
 
 ### Deprecated methods
@@ -1308,7 +1328,7 @@ customization: {
 | Deprecated Method | Use Instead | Notes |
 |------------------|-------------|-------|
 | `getBusiness()` | (auto-handled) | No longer needed |
-| `customerRegister(email)` | (auto-handled) | No longer needed |
+| `customerRegister(email)` | (auto-handled) | No longer needed. Follows `core_payments_enabled` like the customer of `payment()` |
 | `createOrder(items)` | `payment()` | Replaced by unified `payment()` |
 | `createPayment(items)` | `payment()` | Replaced by unified `payment()` |
 | `startCheckoutRouter(data)` | `payment()` | Replaced by unified `payment()` |

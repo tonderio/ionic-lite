@@ -1,11 +1,13 @@
+import { API_ENDPOINTS } from "../shared/constants/apiEndpoints";
+import { fromCorePaymentMethods, buildSupportError } from "../helpers/coreSupport";
 import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
 import {
     buildPublicAppError,
 } from "../shared/utils/appError";
 
-export async function getCustomerAPMs(baseUrlTonder: string, publicApiKeyTonder: string, query: string = "?status=active&page_size=10000&country=México", signal:  AbortSignal | null | undefined = null) {
+export async function getCustomerAPMs(coreBaseUrl: string, publicApiKeyTonder: string, query: string = "?status=active&page_size=10000&country=México", signal:  AbortSignal | null | undefined = null) {
     const response = await fetch(
-        `${baseUrlTonder}/api/v1/payment_methods${query}`,
+        `${coreBaseUrl}${API_ENDPOINTS.CORE_PAYMENT_METHODS}${query}`,
         {
             method: 'GET',
             headers: {
@@ -15,9 +17,6 @@ export async function getCustomerAPMs(baseUrlTonder: string, publicApiKeyTonder:
             signal
         });
 
-    if (response.ok) return await response.json();
-    throw await buildPublicAppError({
-        response,
-        errorCode: ErrorKeyEnum.FETCH_PAYMENT_METHODS_ERROR,
-    });
+    if (response.ok) return fromCorePaymentMethods(await response.json());
+    throw await buildSupportError(response, ErrorKeyEnum.FETCH_PAYMENT_METHODS_ERROR, "core");
 }

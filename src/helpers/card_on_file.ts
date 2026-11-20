@@ -105,13 +105,17 @@ export class CardOnFile {
   private readonly merchantId: string;
   private readonly apiKey: string;
   private readonly isTestEnvironment: boolean;
+  private readonly subscriptionOwner?: () => string | undefined;
   private acquirerInstance: AcquirerInstance | null = null;
 
   constructor(config: {
     merchantId: string;
     apiKey: string;
     isTestEnvironment?: boolean;
+    /** Replaces the `customerId` of `process()` in the subscription metadata when it answers one. */
+    subscriptionOwner?: () => string | undefined;
   }) {
+    this.subscriptionOwner = config.subscriptionOwner;
     this.isTestEnvironment = config.isTestEnvironment ?? true;
     // Use centralized API endpoint constants
     const mode = this.isTestEnvironment ? "stage" : "production";
@@ -344,7 +348,7 @@ export class CardOnFile {
       token: tokenResponse.token,
       contactDetails: params.contactDetails,
       metadata: {
-        customerId: params.customerId,
+        customerId: this.subscriptionOwner?.() ?? params.customerId,
       },
       currency: params.currency,
     });

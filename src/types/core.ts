@@ -1,6 +1,12 @@
 /** Which backend charges and finishes one payment. It is chosen once and never changes. */
 export type PaymentEngine = "core" | "legacy";
 
+/** Where the customer and saved-card calls go: tokens are not interchangeable, so both always share one engine. */
+export interface ISupportTarget {
+    engine: PaymentEngine;
+    baseUrl: string;
+}
+
 export interface ICoreRouting {
     checkout_id?: string;
     is_route_finished?: boolean;
