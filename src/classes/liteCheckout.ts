@@ -12,6 +12,8 @@ import {getCustomerAPMs} from "../data/api";
 import {BaseInlineCheckout} from "./BaseInlineCheckout";
 import {getSkyflowTokens, initSkyflowInstance, mountRevealFields, mountSkyflowFields} from "../helpers/skyflow";
 import {startCheckoutRouter} from "../data/checkoutApi";
+import {registerOrFetchCustomer} from "../data/customerApi";
+import {saveCustomerCard, removeCustomerCard} from "../data/cardApi";
 import {getOpenpayDeviceSessionID} from "../data/openPayApi";
 import {getPaymentMethodDetails} from "../shared/catalog/paymentMethodsCatalog";
 import {APM, IEvents, IInlineLiteCheckoutOptions, InCollectorContainer, TonderAPM} from "../types/commons";
@@ -487,7 +489,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     this.skyflowInstance = await initSkyflowInstance({
       vault_id: vault_id,
       vault_url: vault_url,
-      baseUrl: this.baseUrl,
+      coreBaseUrl: this.coreBaseUrl,
       apiKey: this.apiKeyTonder,
       mode: this.mode,
     })
@@ -531,7 +533,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       vault_id: vault_id,
       vault_url: vault_url,
       data,
-      baseUrl: this.baseUrl,
+      coreBaseUrl: this.coreBaseUrl,
       apiKey: this.apiKeyTonder,
     });
   }
@@ -704,24 +706,13 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     email: string,
   ): Promise<CustomerRegisterResponse | ErrorResponse> {
     try {
-      const url = `${this.baseUrl}/api/v1/customer/`;
-      const data = { email: email };
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Token ${this.apiKeyTonder}`,
-        },
-        signal: this.abortController.signal,
-        body: JSON.stringify(data),
-      });
-
-      if (response.ok)
-        return (await response.json()) as CustomerRegisterResponse;
-      throw await buildPublicAppError({
-        response,
-        errorCode: ErrorKeyEnum.CUSTOMER_OPERATION_ERROR,
-      });
+      await this._fetchMerchantData();
+      return await registerOrFetchCustomer(
+        this._supportTarget(),
+        this.apiKeyTonder,
+        { email },
+        this.abortController.signal,
+      );
     } catch (e) {
       this.reportSdkError(e, {
         feature: "customer-register",
@@ -984,25 +975,13 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     try {
       await this._fetchMerchantData();
 
-      const response = await fetch(
-        `${this.baseUrl}/api/v1/business/${getBusinessId(this.merchantData)}/cards/`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${secureToken}`,
-            "User-token": customerToken,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ ...data }),
-        },
-      );
-
-      if (response.ok)
-        return (await response.json()) as RegisterCustomerCardResponse;
-      throw await buildPublicAppError({
-        response,
-        errorCode: ErrorKeyEnum.SAVE_CARD_ERROR,
-      });
+      return (await saveCustomerCard(
+        this._supportTarget(),
+        customerToken,
+        secureToken,
+        getBusinessId(this.merchantData),
+        { ...data } as ISaveCardSkyflowRequest,
+      )) as RegisterCustomerCardResponse;
     } catch (error) {
       this.reportSdkError(error, {
         feature: "register-customer-card",
@@ -1026,6 +1005,17 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   ): Promise<Boolean | ErrorResponse> {
     try {
       await this._fetchMerchantData();
+      if (this._supportTarget().engine === "core") {
+        // The core takes the secure token and the customer's token, never the customer's token as `Token`.
+        await removeCustomerCard(
+          this._supportTarget(),
+          customerToken,
+          this.secureToken,
+          skyflowId,
+          getBusinessId(this.merchantData),
+        );
+        return true;
+      }
       const response = await fetch(
         `${this.baseUrl}/api/v1/business/${getBusinessId(this.merchantData)}/cards/${skyflowId}`,
         {
@@ -1064,7 +1054,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   async getActiveAPMs(): Promise<APM[]> {
     try {
       const apms_response = await getCustomerAPMs(
-        this.baseUrl,
+        this.coreBaseUrl,
         this.apiKeyTonder,
       );
       const apms_results =

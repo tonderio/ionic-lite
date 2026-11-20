@@ -17,6 +17,10 @@ export const API_ENDPOINTS = Object.freeze({
   ACQ_SUBSCRIPTION_CREATE: "/acq-kushki/subscription/create",
   CORE_BUSINESS_CONFIG: "/transactions/v1/business/config",
   CORE_PROCESS: "/transactions/v1/process",
+  CORE_CUSTOMER: "/transactions/v1/customer",
+  CORE_CARDS: "/transactions/v1/cards",
+  CORE_PAYMENT_METHODS: "/transactions/v1/payment_methods",
+  CORE_VAULT_TOKEN: "/transactions/v1/vault-token",
 });
 
 /**

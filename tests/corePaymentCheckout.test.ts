@@ -89,6 +89,9 @@ function installFetch({ flag, process, router }: Routes): jest.Mock {
     if (url === `${CORE}/transactions/v1/process`) {
       return reply(process ?? { status: 201, body: CORE_SUCCESS });
     }
+    if (url === `${CORE}/transactions/v1/customer`) {
+      return reply({ status: 201, body: { customer_id: 1, email: "ana@example.com", first_name: "Ana", last_name: "", auth_token: "core-cust-token", auth_token_expires_at: "2026-11-20T12:00:00Z" } });
+    }
     if (url === `${LEGACY}/api/v1/customer/`) {
       return reply({ status: 200, body: { id: 1, auth_token: "cust-token" } });
     }
@@ -107,6 +110,14 @@ function installFetch({ flag, process, router }: Routes): jest.Mock {
 
 function callsTo(mock: jest.Mock, url: string) {
   return mock.mock.calls.filter(([called]) => called === url);
+}
+
+// A core customer's token is not valid on the monolith: the legacy order is placed by the
+// customer the monolith registered, never by the one the core did.
+function expectLegacyOrderOfLegacyCustomer(mock: jest.Mock) {
+  expect(callsTo(mock, `${LEGACY}/api/v1/customer/`)).toHaveLength(1);
+  const order = JSON.parse(callsTo(mock, `${LEGACY}/api/v1/orders/`)[0][1].body);
+  expect(order.client).toBe("cust-token");
 }
 
 function paymentData(overrides: Record<string, unknown> = {}) {
@@ -400,6 +411,7 @@ describe("card payment with the flag ON", () => {
     expect(callsTo(mock, `${CORE}/transactions/v1/process`)).toHaveLength(1);
     expect(callsTo(mock, `${LEGACY}/api/v1/orders/`)).toHaveLength(1);
     expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(1);
+    expectLegacyOrderOfLegacyCustomer(mock);
   });
 
   it("sends the customer's identification as the legacy SDK did", async () => {
@@ -486,6 +498,7 @@ describe("card payment with the flag ON", () => {
 
     expect(callsTo(mock, `${CORE}/transactions/v1/process`)).toHaveLength(0);
     expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(1);
+    expectLegacyOrderOfLegacyCustomer(mock);
   });
 
   it("keeps the engine of a payment with the 3DS state it stores", async () => {

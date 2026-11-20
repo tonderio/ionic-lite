@@ -1,14 +1,16 @@
+import { buildSupportError } from "../helpers/coreSupport";
+import { API_ENDPOINTS } from "../shared/constants/apiEndpoints";
 import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
 import {
   buildPublicAppError,
 } from "../shared/utils/appError";
 
 export async function getVaultToken(
-  baseUrl: string,
+  coreBaseUrl: string,
   apiKey: string,
   signal = null,
 ) {
-  const response = await fetch(`${baseUrl}/api/v1/vault-token/`, {
+  const response = await fetch(`${coreBaseUrl}${API_ENDPOINTS.CORE_VAULT_TOKEN}`, {
     method: "GET",
     headers: {
       Authorization: `Token ${apiKey}`,
@@ -21,8 +23,5 @@ export async function getVaultToken(
     return responseBody.token;
   }
 
-  throw await buildPublicAppError({
-    response,
-    errorCode: ErrorKeyEnum.VAULT_TOKEN_ERROR,
-  });
+  throw await buildSupportError(response, ErrorKeyEnum.VAULT_TOKEN_ERROR, "core");
 }

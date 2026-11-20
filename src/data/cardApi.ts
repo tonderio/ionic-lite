@@ -3,16 +3,26 @@ import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum";
 import {
   buildPublicAppError,
 } from "../shared/utils/appError";
+import { API_ENDPOINTS } from "../shared/constants/apiEndpoints";
+import {fromCoreCards, fromCoreSavedCard, buildSupportError} from "../helpers/coreSupport";
+import {ISupportTarget} from "../types/core";
 import {ICustomerCardsResponse, ISaveCardInternalResponse, ISaveCardSkyflowRequest} from "../types/card";
 
+// The core takes the business from the credential, never from the path.
+function cardsUrl(target: ISupportTarget, businessId: string | number, skyflowId = ""): string {
+  return target.engine === "core"
+    ? `${target.baseUrl}${API_ENDPOINTS.CORE_CARDS}${skyflowId && `/${skyflowId}`}`
+    : `${target.baseUrl}/api/v1/business/${businessId}/cards/${skyflowId}`;
+}
+
 export async function fetchCustomerCards(
-  baseUrl: string,
+  target: ISupportTarget,
   customerToken: string,
   secureToken: string,
   businessId: string | number,
   signal = null,
 ): Promise<ICustomerCardsResponse> {
-  const url = `${baseUrl}/api/v1/business/${businessId}/cards/`;
+  const url = cardsUrl(target, businessId);
   const response = await fetch(url, {
     method: "GET",
     headers: {
@@ -22,7 +32,10 @@ export async function fetchCustomerCards(
     },
     signal,
   });
-  if (response.ok) return await response.json();
+  if (response.ok) {
+    const body = await response.json();
+    return target.engine === "core" ? fromCoreCards(body) : body;
+  }
   if (response.status === 401) {
     return {
       user_id: 0,
@@ -30,21 +43,18 @@ export async function fetchCustomerCards(
     };
   }
 
-  throw await buildPublicAppError({
-    response,
-    errorCode: ErrorKeyEnum.FETCH_CARDS_ERROR,
-  });
+  throw await buildSupportError(response, ErrorKeyEnum.FETCH_CARDS_ERROR, target.engine);
 }
 
 export async function saveCustomerCard(
-  baseUrl: string,
+  target: ISupportTarget,
   customerToken: string,
   secureToken: string,
   businessId: string | number,
   data: ISaveCardSkyflowRequest,
   appOrigin: boolean = false,
 ): Promise<ISaveCardInternalResponse> {
-  const url = `${baseUrl}/api/v1/business/${businessId}/cards/`;
+  const url = cardsUrl(target, businessId);
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -56,22 +66,22 @@ export async function saveCustomerCard(
     body: JSON.stringify(data),
   });
 
-  if (response.ok) return await response.json();
+  if (response.ok) {
+    const body = await response.json();
+    return target.engine === "core" ? fromCoreSavedCard(body) : body;
+  }
 
-  throw await buildPublicAppError({
-    response,
-    errorCode: ErrorKeyEnum.SAVE_CARD_ERROR,
-  });
+  throw await buildSupportError(response, ErrorKeyEnum.SAVE_CARD_ERROR, target.engine);
 }
 
 export async function removeCustomerCard(
-  baseUrl: string,
+  target: ISupportTarget,
   customerToken: string,
   secureToken: string,
   skyflowId = "",
   businessId: string | number,
 ): Promise<string> {
-  const url = `${baseUrl}/api/v1/business/${businessId}/cards/${skyflowId}`;
+  const url = cardsUrl(target, businessId, skyflowId);
 
   const response = await fetch(url, {
     method: "DELETE",
@@ -85,8 +95,5 @@ export async function removeCustomerCard(
   if (response.status === 204) return MESSAGES_EN[ErrorKeyEnum.CARD_REMOVED_SUCCESSFULLY];
   if (response.ok && "json" in response) return await response.json();
 
-  throw await buildPublicAppError({
-    response,
-    errorCode: ErrorKeyEnum.REMOVE_CARD_ERROR,
-  });
+  throw await buildSupportError(response, ErrorKeyEnum.REMOVE_CARD_ERROR, target.engine);
 }
