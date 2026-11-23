@@ -1,5 +1,4 @@
 import { API_ENDPOINTS } from "../shared/constants/apiEndpoints";
-import { AppError } from "../shared/utils/appError";
 import { buildCoreProcessBody } from "../helpers/corePayment";
 
 export const SDK_APP_ORIGIN = "sdk/ionic";
@@ -31,17 +30,3 @@ export async function createCorePayment(
   return { status: response.status, statusText: response.statusText, body };
 }
 
-/** The kill switch refused the create: nothing was created, so the legacy flow may take over. */
-export function isOperationsDisabled(error: unknown): boolean {
-  return (
-    error instanceof AppError &&
-    isOperationsDisabledAnswer({
-      status: error.statusCode,
-      body: (error.originalError as any)?.body,
-    })
-  );
-}
-
-export function isOperationsDisabledAnswer(answer: Pick<CoreAnswer, "status" | "body">): boolean {
-  return answer.status === 503 && answer.body?.error?.code === "operations_disabled";
-}

@@ -38,12 +38,13 @@ import {getSecureToken} from "../data/tokenApi";
 import {ErrorKeyEnum} from "../shared/enum/ErrorKeyEnum";
 import { IMPConfigRequest } from "../types/mercadoPago";
 import { CardOnFile } from "../helpers/card_on_file";
-import { SdkTelemetryClient } from "../helpers/SdkTelemetryClient";
-import { getApiBaseUrl, getTelemetryEndpoint } from "../shared/constants/apiEndpoints";
+import type { TelemetryClient } from "@tonder.io/client-telemetry";
+import { createSdkTelemetry, errorFields, paymentMethodType, type StepFields } from "../helpers/sdkTelemetry";
+import { getApiBaseUrl } from "../shared/constants/apiEndpoints";
 import { SDK_INFO } from "../helpers/sdkInfo";
 import { AppError, buildPublicAppError, buildPublicAppErrorFromAnswer } from "../shared/utils/appError";
-import { createCorePayment, isOperationsDisabled, isOperationsDisabledAnswer } from "../data/coreApi";
-import { buildCoreProcessBody, describeCoreRefusal, newRequestId, rebuildCheckoutResult, rebuildVerifyTransaction } from "../helpers/corePayment";
+import { createCorePayment } from "../data/coreApi";
+import { buildCoreProcessBody, newRequestId, rebuildCheckoutResult, rebuildVerifyTransaction } from "../helpers/corePayment";
 type CheckoutRequest = {
   card?: Record<string, any>;
   payment_method?: string;
@@ -78,8 +79,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   card? = {};
   currency?: string = "";
   protected cardOnFileInstance: CardOnFile | null = null;
-  protected telemetry: SdkTelemetryClient;
-  protected readonly requestId: string;
+  protected telemetry: TelemetryClient;
   #apm_config?:IMPConfigRequest | Record<string, any>
   #customerData?: Record<string, any>;
 
@@ -103,11 +103,12 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     this.baseUrl = baseUrlTonder || TONDER_URL_BY_MODE[this.mode] || TONDER_URL_BY_MODE["stage"];
     this.coreBaseUrl = getApiBaseUrl(this.mode);
     this.abortController = new AbortController();
-    this.requestId = this.generateRequestId();
     this.customization = {
       ...this.customization,
       ...(customization || {}),
     }
+
+    this.telemetry = createSdkTelemetry(this.mode, this.apiKeyTonder, sdkInfo || SDK_INFO);
 
     this.process3ds = new ThreeDSHandler({
       apiKey: this.apiKeyTonder,
@@ -117,63 +118,41 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
       redirectOnComplete: this.customization.redirectOnComplete,
       tdsIframeId: tdsIframeId,
       tonderPayButtonId: tonderPayButtonId,
-      callBack: callBack
+      callBack: callBack,
+      telemetry: this.telemetry
     });
     this.tdsIframeId = tdsIframeId;
-
-    const resolvedSdkInfo = sdkInfo || SDK_INFO;
-
-    // Initialize telemetry
-    this.telemetry = new SdkTelemetryClient({
-      endpoint: getTelemetryEndpoint(this.mode),
-      apiKey: this.apiKeyTonder,
-      platform: resolvedSdkInfo.name,
-      platform_version: resolvedSdkInfo.version,
-      mode: this.mode || "stage",
-    });
   }
 
   configureCheckout(data: IConfigureCheckout) {
+    this.telemetry.methodCalled("configureCheckout");
     if ("secureToken" in data) this.#setSecureToken(data["secureToken"]);
     this.#setCheckoutData(data)
   }
 
   /**
-   * Get customer ID for telemetry (if available)
+   * Times one step of the payment flow and reports how it ended. `run` may fill `fields`
+   * (the core's operation id, its HTTP status) for whichever event follows.
    */
-  protected getCustomerId(): string | undefined {
-    return this.#customerData?.id?.toString();
-  }
-
-  /**
-   * Report SDK errors to telemetry endpoint
-   * NEVER throws - completely silent on failure
-   */
-  protected reportSdkError(err: unknown, extra?: Record<string, any>): void {
+  protected async trackStep<T>(
+    step: string,
+    base: StepFields,
+    run: (fields: StepFields) => Promise<T>,
+  ): Promise<T> {
+    const started = Date.now();
+    const fields: StepFields = { ...base };
     try {
-      const defaultUserId = this.getCustomerId();
-      const telemetryError =
-        err instanceof AppError && err.originalError !== undefined
-          ? err.originalError
-          : err;
-      const metadata = {
-        ...(extra?.metadata || {}),
-        ...(extra?.metadata?.error === undefined ? { error: telemetryError } : {}),
-      };
-      const context: Record<string, any> = {
-        tenant_id: this.merchantData?.business?.pk?.toString(),
-        user_id: defaultUserId,
-        ...(extra || {}),
-        metadata,
-        request_id: this.requestId,
-      };
-
-      if (!context.user_id) delete context.user_id;
-      context.feature = extra?.feature || "unknown";
-
-      this.telemetry.captureException(err, context);
-    } catch (e) {
-      // Silent - never throw
+      const result = await run(fields);
+      this.telemetry.flowStep(step, { outcome: "ok", duration_ms: Date.now() - started, ...fields });
+      return result;
+    } catch (error) {
+      this.telemetry.flowFailed(step, {
+        outcome: "error",
+        duration_ms: Date.now() - started,
+        ...errorFields(error),
+        ...fields,
+      });
+      throw error;
     }
   }
 
@@ -182,6 +161,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }
 
   async verify3dsTransaction(): Promise<ITransaction | CoreVerifyTransaction | IStartCheckoutResponse | void> {
+    this.telemetry.methodCalled("verify3dsTransaction");
     const engine = this.process3ds.getStoredEngine();
     const result3ds = await this.process3ds.verifyTransactionStatus();
     if (engine === "core") {
@@ -199,33 +179,27 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }
 
   payment(data: IProcessPaymentRequest): Promise<IStartCheckoutResponse> {
+    this.telemetry.methodCalled("payment");
+    this.telemetry.flowStep("start", { payment_method_type: paymentMethodType(data.payment_method) });
     return new Promise(async (resolve, reject) => {
-      let response;
       try {
-        this.#setCheckoutData(data)
-        response = await this._checkout(data);
-        this.process3ds.setPayload(response);
-        const payload = await this._handle3dsRedirect(response);
-        if (payload) {
-          try {
-            const selector: any = document.querySelector(`#${this.tonderPayButtonId}`);
-            if(selector) {
-              selector.disabled = false;
-            }
-          } catch {}
-          if (this.callBack) this.callBack!(response);
-          resolve(response);
-        }
-      } catch (error) {
-        this.reportSdkError(error, {
-          feature: "payment",
-          process_id: response?.payment_id  || response?.payment?.id || response?.payment?.pk,
-          metadata: {
-            step: "payment",
-            request: data,
-            response
-          },
+        await this.trackStep("payment", { payment_method_type: paymentMethodType(data.payment_method) }, async () => {
+          this.#setCheckoutData(data)
+          const response = await this._checkout(data);
+          this.process3ds.setPayload(response);
+          const payload = await this._handle3dsRedirect(response);
+          if (payload) {
+            try {
+              const selector: any = document.querySelector(`#${this.tonderPayButtonId}`);
+              if(selector) {
+                selector.disabled = false;
+              }
+            } catch {}
+            if (this.callBack) this.callBack!(response);
+            resolve(response);
+          }
         });
+      } catch (error) {
         reject(
           buildPublicAppError(
             {
@@ -239,15 +213,10 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }
 
   async getSecureToken(secretApikey: string): Promise<GetSecureTokenResponse> {
+    this.telemetry.methodCalled("getSecureToken");
     try {
       return await getSecureToken(this.baseUrl, secretApikey)
     } catch (error) {
-      this.reportSdkError(error, {
-        feature: "secure-token",
-        metadata: {
-          step: "getSecureToken",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.SECURE_TOKEN_ERROR,
@@ -306,24 +275,34 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     return this.#customerData!;
   }
 
-  // The engine is chosen here, once, and travels with the 3DS state: a payment started
-  // on one engine is finished by it, whatever the merchant's flag does meanwhile.
+  // The customer step belongs to the payment funnel: the cards methods share _getCustomer
+  // and must not report it.
+  protected async _getCustomerForPayment(signal: AbortSignal | null = null) {
+    if (this.#customerData) return this.#customerData;
+    return this.trackStep("customer", {}, () => this._getCustomer(signal));
+  }
+
+  // The engine is chosen from the flag read when the SDK starts, and travels with the 3DS
+  // state: a payment started on one engine is finished by it. An error from the core is
+  // the merchant's answer and is never retried on the monolith.
   async _handleCheckout(request: CheckoutRequest) {
     if (this.merchantData?.core_payments_enabled === true && this.#isCorePayment(request)) {
       this.process3ds.setEngine("core");
-      try {
-        return await this.#coreCheckout(request);
-      } catch (error) {
-        if (!isOperationsDisabled(error)) throw error;
-      }
+      const requestId = newRequestId();
+      return this.trackStep("charge", { payment_method_type: "CARD", request_id: requestId }, (fields) =>
+        this.#coreCheckout(request, requestId, fields),
+      );
     }
     this.process3ds.setEngine("legacy");
-    return this.#legacyCheckout(await this.#withLegacyCustomer(request));
+    const legacyRequest = await this.#withLegacyCustomer(request);
+    return this.trackStep("charge", { payment_method_type: paymentMethodType(request.payment_method) }, () =>
+      this.#legacyCheckout(legacyRequest),
+    );
   }
 
   // The legacy order takes the customer's token as `client`, and a core customer's token is
-  // not valid on the monolith: a payment that ends on the legacy flow (an alternative method,
-  // or the kill switch's retry) with the flag ON registers its customer there first.
+  // not valid on the monolith: a payment that ends on the legacy flow (an alternative method)
+  // with the flag ON registers its customer there first.
   async #withLegacyCustomer(request: CheckoutRequest): Promise<CheckoutRequest> {
     if (this._supportTarget().engine !== "core") return request;
     const customer = await registerOrFetchCustomer(
@@ -344,63 +323,36 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   async #coreCheckout({
     card,
     returnUrl: returnUrlData
-  }: CheckoutRequest) {
+  }: CheckoutRequest, requestId: string, fields: StepFields) {
     const { reference } = this.merchantData!;
-    let payment;
-    let coreError;
-    try {
-      payment = buildCoreProcessBody({
-        amount: Number(this.cartTotal),
-        currency: this.currency,
-        reference: this.order_reference ? this.order_reference : reference,
-        customer: this.customer,
-        card: card!,
-        metadata: this.metadata,
-        returnUrl: returnUrlData || this.returnUrl,
-        items: this.cartItems,
-        browserInfo: getBrowserInfo(),
-      });
-      const answer = await createCorePayment(
-        this.coreBaseUrl,
-        this.apiKeyTonder,
-        payment,
-        newRequestId(),
-      );
-      if (answer.status >= 400) coreError = describeCoreRefusal(answer.status, answer.body);
-      // Nothing was created: the raw answer is kept so the caller can recognise it and fall back.
-      if (isOperationsDisabledAnswer(answer)) {
-        throw buildPublicAppErrorFromAnswer({
-          errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
-          status: answer.status,
-          body: answer.body,
-        });
-      }
-      const result = rebuildCheckoutResult(
-        answer.status,
-        answer.body,
-        { coreBaseUrl: this.coreBaseUrl },
-        answer.statusText,
-      );
-      if (result.outcome === "resolve") return result.body;
-      throw buildPublicAppErrorFromAnswer({
-        errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
-        status: result.status,
-        statusText: result.statusText,
-        body: result.body,
-      });
-    } catch (error) {
-      if (!isOperationsDisabled(error)) {
-        this.reportSdkError(error, {
-          feature: "payment",
-          metadata: {
-            step: "_handleCheckout",
-            payment,
-            core_error: coreError,
-          },
-        });
-      }
-      throw error;
-    }
+    const payment = buildCoreProcessBody({
+      amount: Number(this.cartTotal),
+      currency: this.currency,
+      reference: this.order_reference ? this.order_reference : reference,
+      customer: this.customer,
+      card: card!,
+      metadata: this.metadata,
+      returnUrl: returnUrlData || this.returnUrl,
+      items: this.cartItems,
+      browserInfo: getBrowserInfo(),
+    });
+    const answer = await createCorePayment(this.coreBaseUrl, this.apiKeyTonder, payment, requestId);
+    fields.http_status = answer.status;
+    if (answer.status >= 400) fields.error_code = answer.body?.error?.code;
+    if (typeof answer.body?.id === "string") fields.operation_id = answer.body.id;
+    const result = rebuildCheckoutResult(
+      answer.status,
+      answer.body,
+      { coreBaseUrl: this.coreBaseUrl },
+      answer.statusText,
+    );
+    if (result.outcome === "resolve") return result.body;
+    throw buildPublicAppErrorFromAnswer({
+      errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
+      status: result.status,
+      statusText: result.statusText,
+      body: result.body,
+    });
   }
 
   async #legacyCheckout({
@@ -417,121 +369,107 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     let orderItems;
     let paymentItems;
     let routerItems
-    try {
-      let deviceSessionIdTonder;
-      if (
-        !deviceSessionIdTonder &&
-        openpay_keys.merchant_id &&
-        openpay_keys.public_key &&
-        !payment_method
-      ) {
-        deviceSessionIdTonder = await getOpenpayDeviceSessionID(
-          openpay_keys.merchant_id,
-          openpay_keys.public_key,
-          isSandbox,
-          this.abortController.signal,
-        );
-      }
-
-      const { id, auth_token } = customer;
-
-      orderItems = {
-        business: this.apiKeyTonder,
-        client: auth_token,
-        billing_address_id: null,
-        shipping_address_id: null,
-        amount: total,
-        status: "A",
-        reference: reference,
-        is_oneclick: true,
-        items: this.cartItems!,
-        currency: this.currency,
-        metadata: this.metadata,
-      };
-      const jsonResponseOrder = await createOrder(
-        this.baseUrl,
-        this.apiKeyTonder,
-        orderItems,
+    let deviceSessionIdTonder;
+    if (
+      !deviceSessionIdTonder &&
+      openpay_keys.merchant_id &&
+      openpay_keys.public_key &&
+      !payment_method
+    ) {
+      deviceSessionIdTonder = await getOpenpayDeviceSessionID(
+        openpay_keys.merchant_id,
+        openpay_keys.public_key,
+        isSandbox,
+        this.abortController.signal,
       );
+    }
 
-      // Create payment
-      const now = new Date();
-      const dateString = now.toISOString();
+    const { id, auth_token } = customer;
 
-      paymentItems = {
-        business_pk: business.pk,
-        client_id: id,
-        amount: total,
-        date: dateString,
-        order_id: jsonResponseOrder.id,
-        customer_order_reference: this.order_reference ? this.order_reference : reference,
-        items: this.cartItems,
-        currency: this.currency,
-        metadata: this.metadata,
-      };
-      const jsonResponsePayment = await createPayment(
-        this.baseUrl,
-        this.apiKeyTonder,
-        paymentItems,
-      );
+    orderItems = {
+      business: this.apiKeyTonder,
+      client: auth_token,
+      billing_address_id: null,
+      shipping_address_id: null,
+      amount: total,
+      status: "A",
+      reference: reference,
+      is_oneclick: true,
+      items: this.cartItems!,
+      currency: this.currency,
+      metadata: this.metadata,
+    };
+    const jsonResponseOrder = await createOrder(
+      this.baseUrl,
+      this.apiKeyTonder,
+      orderItems,
+    );
 
-      // Checkout router
-      routerItems = {
-        name: get(this.customer, "firstName", get(this.customer, "name", "")),
-        last_name: get(
-          this.customer,
-          "lastName",
-          get(this.customer, "lastname", ""),
-        ),
-        email_client: get(this.customer, "email", ""),
-        phone_number: get(this.customer, "phone", ""),
-        return_url: returnUrlData || this.returnUrl,
-        id_product: "no_id",
-        quantity_product: 1,
-        id_ship: "0",
-        instance_id_ship: "0",
-        amount: total,
-        title_ship: "shipping",
-        description: "transaction",
-        device_session_id: deviceSessionIdTonder ? deviceSessionIdTonder : null,
-        token_id: "",
-        order_id: jsonResponseOrder.id,
-        business_id: business.pk,
-        payment_id: jsonResponsePayment.pk,
-        source: "sdk",
-        items: this.cartItems,
-        metadata: this.metadata,
-        browser_info: getBrowserInfo(),
-        currency: this.currency!,
-        ...(!!payment_method ? { payment_method } : { card }),
-        apm_config: this.#apm_config,
-        ...(this.customer && "identification" in this.customer ? { identification: this.customer.identification } : {}),
-        ...(enable_card_on_file !== undefined ? { enable_card_on_file } : {}),
-      };
+    // Create payment
+    const now = new Date();
+    const dateString = now.toISOString();
 
-      const jsonResponseRouter = await startCheckoutRouter(
-        this.baseUrl,
-        this.apiKeyTonder,
-        routerItems,
-      );
+    paymentItems = {
+      business_pk: business.pk,
+      client_id: id,
+      amount: total,
+      date: dateString,
+      order_id: jsonResponseOrder.id,
+      customer_order_reference: this.order_reference ? this.order_reference : reference,
+      items: this.cartItems,
+      currency: this.currency,
+      metadata: this.metadata,
+    };
+    const jsonResponsePayment = await createPayment(
+      this.baseUrl,
+      this.apiKeyTonder,
+      paymentItems,
+    );
 
-      if (jsonResponseRouter) {
-        return jsonResponseRouter;
-      } else {
-        return false;
-      }
-    } catch (error) {
-      this.reportSdkError(error, {
-        feature: "payment",
-        process_id: routerItems?.payment_id,
-        metadata: {
-          step: "_handleCheckout",
-          orderItems,
-          paymentItems,
-          routerItems
-        },
-      });
-      throw error;
+    // Checkout router
+    routerItems = {
+      name: get(this.customer, "firstName", get(this.customer, "name", "")),
+      last_name: get(
+        this.customer,
+        "lastName",
+        get(this.customer, "lastname", ""),
+      ),
+      email_client: get(this.customer, "email", ""),
+      phone_number: get(this.customer, "phone", ""),
+      return_url: returnUrlData || this.returnUrl,
+      id_product: "no_id",
+      quantity_product: 1,
+      id_ship: "0",
+      instance_id_ship: "0",
+      amount: total,
+      title_ship: "shipping",
+      description: "transaction",
+      device_session_id: deviceSessionIdTonder ? deviceSessionIdTonder : null,
+      token_id: "",
+      order_id: jsonResponseOrder.id,
+      business_id: business.pk,
+      payment_id: jsonResponsePayment.pk,
+      source: "sdk",
+      items: this.cartItems,
+      metadata: this.metadata,
+      browser_info: getBrowserInfo(),
+      currency: this.currency!,
+      ...(!!payment_method ? { payment_method } : { card }),
+      apm_config: this.#apm_config,
+      ...(this.customer && "identification" in this.customer ? { identification: this.customer.identification } : {}),
+      ...(enable_card_on_file !== undefined ? { enable_card_on_file } : {}),
+    };
+
+    const jsonResponseRouter = await startCheckoutRouter(
+      this.baseUrl,
+      this.apiKeyTonder,
+      routerItems,
+    );
+
+    if (jsonResponseRouter) {
+      return jsonResponseRouter;
+    } else {
+      return false;
     }
   }
 
@@ -557,12 +495,6 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
       }
       return this.merchantData;
     } catch (e) {
-      this.reportSdkError(e, {
-        feature: "fetch-merchant-data",
-        metadata: {
-          step: "_fetchMerchantData",
-        },
-      });
       // Without its configuration the SDK cannot tell which engine charges, and it never falls
       // back to another source: the caller gets a clear error and the next call asks again.
       throw buildPublicAppError({ errorCode: ErrorKeyEnum.FETCH_BUSINESS_ERROR }, e);
@@ -686,15 +618,8 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
           // }, 10000);
           return this.process3ds.verifyTransactionStatus();
         })
-        .catch((error) => {
-          console.log("Error loading iframe:", error);
-          this.reportSdkError(error, {
-            feature: "3ds-verification",
-            metadata: {
-              step: "_handle3dsRedirect",
-              response,
-            },
-          });
+        .catch(() => {
+          // The buyer's return calls verify3dsTransaction(), which surfaces the failure.
         });
     } else {
       const redirectUrl = this.process3ds.getRedirectUrl();
@@ -731,14 +656,6 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
           routerItems,
         );
       } catch (error) {
-        this.reportSdkError(error, {
-          feature: "payment",
-          process_id: response?.payment_id  || response?.payment?.id || response?.payment?.pk,
-          metadata: {
-            step: "#resumeCheckout",
-            response
-          },
-        });
         // throw error
       }
       return response;

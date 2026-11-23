@@ -2,6 +2,7 @@ import { sanitize3dsMarkup } from "../helpers/sanitize3dsMarkup"
 import { isHttpsUrl } from "../helpers/safeUrl"
 import { ErrorKeyEnum } from "../shared/enum/ErrorKeyEnum"
 import { buildPublicAppError } from "../shared/utils/appError"
+import type { TelemetryClient } from "@tonder.io/client-telemetry"
 import { ICoreTransactionResponse, PaymentEngine } from "../types/core"
 
 type CoreResultBuilder = (transaction: ICoreTransactionResponse) => Record<string, any>
@@ -24,7 +25,8 @@ type ThreeDSHandlerContructor = {
   redirectOnComplete?: boolean,
   tdsIframeId?: string, 
   tonderPayButtonId?: string,
-  callBack?: (params: any) => any
+  callBack?: (params: any) => any,
+  telemetry?: TelemetryClient
 }
 
 export class ThreeDSHandler {
@@ -40,6 +42,7 @@ export class ThreeDSHandler {
   redirectOnComplete?: boolean
   tdsIframeId?: string
   tonderPayButtonId?: string
+  telemetry?: TelemetryClient
 
   constructor({
     payload = null,
@@ -50,7 +53,8 @@ export class ThreeDSHandler {
     redirectOnComplete,
     tdsIframeId,
     tonderPayButtonId,
-    callBack
+    callBack,
+    telemetry
   }: ThreeDSHandlerContructor) {
     this.buildCoreResult = buildCoreResult
     this.baseUrl = baseUrl,
@@ -61,6 +65,7 @@ export class ThreeDSHandler {
     this.tonderPayButtonId = tonderPayButtonId
     this.redirectOnComplete = redirectOnComplete
     this.callBack = callBack
+    this.telemetry = telemetry
   }
 
   setStorageItem (data: any) {
@@ -208,6 +213,7 @@ export class ThreeDSHandler {
       }
 
       this.saveVerifyTransactionUrl()
+        this.telemetry?.threedsChallengeShown({ payment_method_type: "CARD" })
         if(this.redirectOnComplete) {
           window.location = url;
         } else {

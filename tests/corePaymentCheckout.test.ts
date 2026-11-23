@@ -370,8 +370,8 @@ describe("card payment with the flag ON", () => {
     expect(failure.originalError.statusText).toBe("Bad Request");
   });
 
-  it("carries the core's error code, type and request id in telemetry only", async () => {
-    installFetch({
+  it("carries the core's error code and the request id it sent in telemetry only", async () => {
+    const mock = installFetch({
       flag: true,
       process: {
         status: 409,
@@ -379,23 +379,20 @@ describe("card payment with the flag ON", () => {
       },
     });
     const { checkout } = buildCheckout();
-    const report = jest.spyOn(checkout as any, "reportSdkError").mockImplementation(() => {});
+    const flowFailed = jest.spyOn((checkout as any).telemetry, "flowFailed");
 
     const failure = await checkout.payment(paymentData()).catch((e) => e);
 
-    expect(report).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          core_error: { status: 409, code: "conflict", type: "conflict", request_id: "req-9" },
-        }),
-      }),
+    const sentRequestId = callsTo(mock, `${CORE}/transactions/v1/process`)[0][1].headers["X-Request-Id"];
+    expect(flowFailed).toHaveBeenCalledWith(
+      "charge",
+      expect.objectContaining({ error_code: "conflict", http_status: 409, request_id: sentRequestId }),
     );
     const merchantSees = JSON.stringify([failure.originalError, failure.details]);
     for (const leaked of ["conflict", "req-9"]) expect(merchantSees).not.toContain(leaked);
   });
 
-  it("retries once on the legacy flow when the kill switch refused the create", async () => {
+  it("returns a 503 operations_disabled from the core to the merchant and makes no monolith request", async () => {
     const mock = installFetch({
       flag: true,
       process: {
@@ -405,13 +402,12 @@ describe("card payment with the flag ON", () => {
     });
     const { checkout } = buildCheckout();
 
-    const result = await checkout.payment(paymentData());
+    await expect(checkout.payment(paymentData())).rejects.toMatchObject({ statusCode: 503 });
 
-    expect(result).toEqual(LEGACY_ROUTER_BODY);
     expect(callsTo(mock, `${CORE}/transactions/v1/process`)).toHaveLength(1);
-    expect(callsTo(mock, `${LEGACY}/api/v1/orders/`)).toHaveLength(1);
-    expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(1);
-    expectLegacyOrderOfLegacyCustomer(mock);
+    expect(callsTo(mock, `${LEGACY}/api/v1/orders/`)).toHaveLength(0);
+    expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(0);
+    expect(callsTo(mock, `${LEGACY}/api/v1/customer/`)).toHaveLength(0);
   });
 
   it("sends the customer's identification as the legacy SDK did", async () => {
