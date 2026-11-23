@@ -42,7 +42,7 @@ import { SdkTelemetryClient } from "../helpers/SdkTelemetryClient";
 import { getApiBaseUrl, getTelemetryEndpoint } from "../shared/constants/apiEndpoints";
 import { SDK_INFO } from "../helpers/sdkInfo";
 import { AppError, buildPublicAppError, buildPublicAppErrorFromAnswer } from "../shared/utils/appError";
-import { createCorePayment, isOperationsDisabled, isOperationsDisabledAnswer } from "../data/coreApi";
+import { createCorePayment } from "../data/coreApi";
 import { buildCoreProcessBody, describeCoreRefusal, newRequestId, rebuildCheckoutResult, rebuildVerifyTransaction } from "../helpers/corePayment";
 type CheckoutRequest = {
   card?: Record<string, any>;
@@ -306,24 +306,21 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     return this.#customerData!;
   }
 
-  // The engine is chosen here, once, and travels with the 3DS state: a payment started
-  // on one engine is finished by it, whatever the merchant's flag does meanwhile.
+  // The engine is chosen from the flag read when the SDK starts, and travels with the 3DS
+  // state: a payment started on one engine is finished by it. An error from the core is
+  // the merchant's answer and is never retried on the monolith.
   async _handleCheckout(request: CheckoutRequest) {
     if (this.merchantData?.core_payments_enabled === true && this.#isCorePayment(request)) {
       this.process3ds.setEngine("core");
-      try {
-        return await this.#coreCheckout(request);
-      } catch (error) {
-        if (!isOperationsDisabled(error)) throw error;
-      }
+      return this.#coreCheckout(request);
     }
     this.process3ds.setEngine("legacy");
     return this.#legacyCheckout(await this.#withLegacyCustomer(request));
   }
 
   // The legacy order takes the customer's token as `client`, and a core customer's token is
-  // not valid on the monolith: a payment that ends on the legacy flow (an alternative method,
-  // or the kill switch's retry) with the flag ON registers its customer there first.
+  // not valid on the monolith: a payment that ends on the legacy flow (an alternative method)
+  // with the flag ON registers its customer there first.
   async #withLegacyCustomer(request: CheckoutRequest): Promise<CheckoutRequest> {
     if (this._supportTarget().engine !== "core") return request;
     const customer = await registerOrFetchCustomer(
@@ -367,14 +364,6 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         newRequestId(),
       );
       if (answer.status >= 400) coreError = describeCoreRefusal(answer.status, answer.body);
-      // Nothing was created: the raw answer is kept so the caller can recognise it and fall back.
-      if (isOperationsDisabledAnswer(answer)) {
-        throw buildPublicAppErrorFromAnswer({
-          errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
-          status: answer.status,
-          body: answer.body,
-        });
-      }
       const result = rebuildCheckoutResult(
         answer.status,
         answer.body,
@@ -389,16 +378,14 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
         body: result.body,
       });
     } catch (error) {
-      if (!isOperationsDisabled(error)) {
-        this.reportSdkError(error, {
-          feature: "payment",
-          metadata: {
-            step: "_handleCheckout",
-            payment,
-            core_error: coreError,
-          },
-        });
-      }
+      this.reportSdkError(error, {
+        feature: "payment",
+        metadata: {
+          step: "_handleCheckout",
+          payment,
+          core_error: coreError,
+        },
+      });
       throw error;
     }
   }

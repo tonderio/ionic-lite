@@ -395,7 +395,7 @@ describe("card payment with the flag ON", () => {
     for (const leaked of ["conflict", "req-9"]) expect(merchantSees).not.toContain(leaked);
   });
 
-  it("retries once on the legacy flow when the kill switch refused the create", async () => {
+  it("returns a 503 operations_disabled from the core to the merchant and makes no monolith request", async () => {
     const mock = installFetch({
       flag: true,
       process: {
@@ -405,13 +405,12 @@ describe("card payment with the flag ON", () => {
     });
     const { checkout } = buildCheckout();
 
-    const result = await checkout.payment(paymentData());
+    await expect(checkout.payment(paymentData())).rejects.toMatchObject({ statusCode: 503 });
 
-    expect(result).toEqual(LEGACY_ROUTER_BODY);
     expect(callsTo(mock, `${CORE}/transactions/v1/process`)).toHaveLength(1);
-    expect(callsTo(mock, `${LEGACY}/api/v1/orders/`)).toHaveLength(1);
-    expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(1);
-    expectLegacyOrderOfLegacyCustomer(mock);
+    expect(callsTo(mock, `${LEGACY}/api/v1/orders/`)).toHaveLength(0);
+    expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(0);
+    expect(callsTo(mock, `${LEGACY}/api/v1/customer/`)).toHaveLength(0);
   });
 
   it("sends the customer's identification as the legacy SDK did", async () => {
