@@ -252,16 +252,6 @@ export function rebuildCheckoutResult(
   return { outcome: "reject", status: 404, body: declinedBody(transaction, ctx) };
 }
 
-/** What support needs to match a refusal with the core's own log; it never reaches the merchant. */
-export function describeCoreRefusal(httpStatus: number, body: any) {
-  return {
-    status: httpStatus,
-    code: body?.error?.code,
-    type: body?.error?.type,
-    request_id: body?.request_id,
-  };
-}
-
 /** The body checkout-router answered on a failed start: its own shape, never the core's raw error. */
 function buildCheckoutRouterErrorBody(status: number, body: any) {
   return {

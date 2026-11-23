@@ -84,10 +84,12 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   }
 
   public async injectCheckout() {
+    this.telemetry.methodCalled("injectCheckout");
     await this._initializeCheckout();
   }
 
   public async getCustomerCards(): Promise<ICustomerCardsResponse> {
+    this.telemetry.methodCalled("getCustomerCards");
     try {
       await this._fetchMerchantData();
       const { auth_token } = await this._getCustomer();
@@ -109,12 +111,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
           })),
       };
     } catch (error) {
-      this.reportSdkError(error, {
-        feature: "get-cards",
-        metadata: {
-          step: "getCustomerCards"
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.FETCH_CARDS_ERROR,
@@ -125,6 +121,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   }
 
   public async saveCustomerCard(): Promise<ISaveCardResponse> {
+    this.telemetry.methodCalled("saveCustomerCard");
     let cardId: string | null = null;
     try {
       await this._fetchMerchantData();
@@ -195,13 +192,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       if(cardId){
           await this.removeCustomerCard(cardId);
       }
-      this.reportSdkError(error, {
-        feature: "save-card",
-        process_id: cardId,
-        metadata: {
-          step: "saveCustomerCard",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.SAVE_CARD_ERROR,
@@ -212,6 +202,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   }
 
   public async removeCustomerCard(skyflowId: string): Promise<string> {
+    this.telemetry.methodCalled("removeCustomerCard");
     try {
       await this._fetchMerchantData();
       const { auth_token } = await this._getCustomer();
@@ -223,13 +214,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         skyflowId,
       );
     } catch (error) {
-      this.reportSdkError(error, {
-        feature: "remove-card",
-        process_id: skyflowId,
-        metadata: {
-          step: "removeCustomerCard"
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.REMOVE_CARD_ERROR,
@@ -240,6 +224,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   }
 
   public async getCustomerPaymentMethods(): Promise<IPaymentMethod[]> {
+    this.telemetry.methodCalled("getCustomerPaymentMethods");
     try {
       const response = await this._fetchCustomerPaymentMethods();
 
@@ -262,12 +247,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         })
         .sort((a, b) => a.priority - b.priority);
     } catch (error) {
-      this.reportSdkError(error, {
-        feature: "get-payment-methods",
-        metadata: {
-          step: "getCustomerPaymentMethods",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.FETCH_PAYMENT_METHODS_ERROR,
@@ -277,6 +256,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     }
   }
   public async mountCardFields(event: IMountCardFieldsRequest): Promise<void> {
+    this.telemetry.methodCalled("mountCardFields");
     // Determine the context: 'create' or 'update:card_id'
     const context = event.card_id ? `update:${event.card_id}` : 'create';
 
@@ -325,13 +305,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       return collectResponse?.records?.[0]?.fields || null;
     } catch (e: any) {
       const errorDescription = e?.error?.description;
-      this.reportSdkError(e, {
-        feature: "collect-card-tokens",
-        process_id: cardId,
-        metadata: {
-          step: "collectCardTokens",
-        },
-      });
       throw new TonderError({
         code: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
         details: {
@@ -364,12 +337,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       return fields;
     } catch (e: any) {
       const errorDescription = e?.error?.description;
-      this.reportSdkError(e, {
-        feature: "collect-create-card-tokens",
-        metadata: {
-          step: "collectCreateCardTokens",
-        },
-      });
       throw new TonderError({
         code: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
         details: {
@@ -393,6 +360,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
    * @param request - Fields to reveal and optional per-field styles/redaction/altText.
    */
   public async revealCardFields(request: IRevealCardFieldsRequest): Promise<void> {
+    this.telemetry.methodCalled("revealCardFields");
     if (!this.lastCollectedTokens) {
       throw buildPublicAppError({
         errorCode: ErrorKeyEnum.MOUNT_COLLECT_ERROR,
@@ -417,6 +385,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   }
 
   public unmountCardFields(context: string = 'all'): void {
+    this.telemetry.methodCalled("unmountCardFields");
     if (context === 'all') {
       this.mountedElementsByContext.forEach((contextData, ctx) => {
         this.unmountContext(ctx);
@@ -443,21 +412,15 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
           if (element && typeof element.unmount === 'function') {
             element.unmount();
           }
-        } catch (error) {
-          console.warn(`Error unmounting Skyflow element from context '${context}':`, error);
-          this.reportSdkError(error, {
-            feature: "unmount-card-fields",
-            metadata: {
-              step: "unmountContext",
-              context,
-            },
-          });
+        } catch {
+          // A field that is already gone has nothing left to unmount.
         }
       });
     }
   }
 
   public async getBusiness(): Promise<GetBusinessResponse> {
+    this.telemetry.methodCalled("getBusiness");
     try {
       return await fetchBusiness(
         this.coreBaseUrl,
@@ -465,12 +428,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         this.abortController.signal,
       );
     } catch (e) {
-      this.reportSdkError(e, {
-        feature: "get-business",
-        metadata: {
-          step: "getBusiness",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.FETCH_BUSINESS_ERROR,
@@ -500,6 +457,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     public_key: string,
     is_sandbox: boolean,
   ): Promise<string | ErrorResponse> {
+    this.telemetry.methodCalled("getOpenpayDeviceSessionID", {}, { deprecated: true });
     try {
       return await getOpenpayDeviceSessionID(
         merchant_id,
@@ -507,12 +465,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         is_sandbox,
       );
     } catch (e) {
-      this.reportSdkError(e, {
-        feature: "get-openpay-device-session",
-        metadata: {
-          step: "getOpenpayDeviceSessionID",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
@@ -528,6 +480,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     vault_url,
     data,
   }: TokensRequest): Promise<any | ErrorResponse> {
+    this.telemetry.methodCalled("getSkyflowTokens", {}, { deprecated: true });
     return await getSkyflowTokens({
       vault_id: vault_id,
       vault_url: vault_url,
@@ -560,7 +513,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       this.merchantData?.core_payments_enabled === true && isCardPaymentMethod(requestedPaymentMethod)
         ? undefined
         : requestedPaymentMethod;
-    const customer = await this._getCustomer(this.abortController.signal) as CustomerRegisterResponse;
+    const customer = await this._getCustomerForPayment(this.abortController.signal) as CustomerRegisterResponse;
     const { business } = this.merchantData!;
     const { auth_token, first_name = "", last_name = "", email = "" } = customer;
     const cardOnFileEnabled = this._hasCardOnFileKeys();
@@ -678,13 +631,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
             if(cardId){
                 await this.removeCustomerCard(cardId)
             }
-            this.reportSdkError(error, {
-              feature: "payment",
-              process_id: cardId,
-              metadata: {
-                step: "card_on_file",
-              },
-            });
             throw error;
         }
       }
@@ -704,6 +650,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   async customerRegister(
     email: string,
   ): Promise<CustomerRegisterResponse | ErrorResponse> {
+    this.telemetry.methodCalled("customerRegister", {}, { deprecated: true });
     try {
       await this._fetchMerchantData();
       return await registerOrFetchCustomer(
@@ -713,12 +660,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         this.abortController.signal,
       );
     } catch (e) {
-      this.reportSdkError(e, {
-        feature: "customer-register",
-        metadata: {
-          step: "customerRegister",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.CUSTOMER_OPERATION_ERROR,
@@ -732,6 +673,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   async createOrder(
     orderItems: CreateOrderRequest,
   ): Promise<CreateOrderResponse | ErrorResponse> {
+    this.telemetry.methodCalled("createOrder", {}, { deprecated: true });
     try {
       const url = `${this.baseUrl}/api/v1/orders/`;
       const data = orderItems;
@@ -749,12 +691,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         errorCode: ErrorKeyEnum.CREATE_ORDER_ERROR,
       });
     } catch (e) {
-      this.reportSdkError(e, {
-        feature: "create-order",
-        metadata: {
-          step: "createOrder",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.CREATE_ORDER_ERROR,
@@ -768,6 +704,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   async createPayment(
     paymentItems: CreatePaymentRequest,
   ): Promise<CreatePaymentResponse | ErrorResponse> {
+    this.telemetry.methodCalled("createPayment", {}, { deprecated: true });
     try {
       const url = `${this.baseUrl}/api/v1/business/${paymentItems.business_pk}/payments/`;
       const data = paymentItems;
@@ -785,12 +722,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         errorCode: ErrorKeyEnum.CREATE_PAYMENT_ERROR,
       });
     } catch (e) {
-      this.reportSdkError(e, {
-        feature: "create-payment",
-        metadata: {
-          step: "createPayment",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.CREATE_PAYMENT_ERROR,
@@ -804,6 +735,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   async startCheckoutRouter(
     routerData: StartCheckoutRequest | StartCheckoutIdRequest,
   ): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
+    this.telemetry.methodCalled("startCheckoutRouter", {}, { deprecated: true });
     const checkoutResult = await startCheckoutRouter(
       this.baseUrl,
       this.apiKeyTonder,
@@ -823,6 +755,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
   async startCheckoutRouterFull(
     routerFullData: StartCheckoutFullRequest,
   ): Promise<StartCheckoutResponse | ErrorResponse | undefined> {
+    this.telemetry.methodCalled("startCheckoutRouterFull", {}, { deprecated: true });
     try {
       const {
         order,
@@ -950,12 +883,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         });
       }
     } catch (e) {
-      this.reportSdkError(e, {
-        feature: "start-checkout-router-full",
-        metadata: {
-          step: "startCheckoutRouterFull",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.START_CHECKOUT_ERROR,
@@ -971,6 +898,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     customerToken: string,
     data: RegisterCustomerCardRequest,
   ): Promise<RegisterCustomerCardResponse | ErrorResponse> {
+    this.telemetry.methodCalled("registerCustomerCard", {}, { deprecated: true });
     try {
       await this._fetchMerchantData();
 
@@ -982,12 +910,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         { ...data } as ISaveCardSkyflowRequest,
       )) as RegisterCustomerCardResponse;
     } catch (error) {
-      this.reportSdkError(error, {
-        feature: "register-customer-card",
-        metadata: {
-          step: "registerCustomerCard",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.SAVE_CARD_ERROR,
@@ -1002,6 +924,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     customerToken: string,
     skyflowId: string = "",
   ): Promise<Boolean | ErrorResponse> {
+    this.telemetry.methodCalled("deleteCustomerCard", {}, { deprecated: true });
     try {
       await this._fetchMerchantData();
       if (this._supportTarget().engine === "core") {
@@ -1033,13 +956,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
         errorCode: ErrorKeyEnum.REMOVE_CARD_ERROR,
       });
     } catch (error) {
-      this.reportSdkError(error, {
-        feature: "delete-customer-card",
-        process_id: skyflowId,
-        metadata: {
-          step: "deleteCustomerCard",
-        },
-      });
       throw buildPublicAppError(
         {
           errorCode: ErrorKeyEnum.REMOVE_CARD_ERROR,
@@ -1051,6 +967,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
 
   // TODO: DEPRECATED
   async getActiveAPMs(): Promise<APM[]> {
+    this.telemetry.methodCalled("getActiveAPMs", {}, { deprecated: true });
     try {
       const apms_response = await getCustomerAPMs(
         this.coreBaseUrl,

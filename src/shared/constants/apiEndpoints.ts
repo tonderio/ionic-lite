@@ -12,7 +12,7 @@ export const API_BASE_URL_BY_MODE = Object.freeze({
  * API endpoint paths
  */
 export const API_ENDPOINTS = Object.freeze({
-  TELEMETRY: "/telemetry/v1/events",
+  TELEMETRY: "/telemetry",
   ACQ_SUBSCRIPTION_TOKEN: "/acq-kushki/subscription/token",
   ACQ_SUBSCRIPTION_CREATE: "/acq-kushki/subscription/create",
   CORE_BUSINESS_CONFIG: "/transactions/v1/business/config",
@@ -22,16 +22,6 @@ export const API_ENDPOINTS = Object.freeze({
   CORE_PAYMENT_METHODS: "/transactions/v1/payment_methods",
   CORE_VAULT_TOKEN: "/transactions/v1/vault-token",
 });
-
-/**
- * Get the full telemetry endpoint URL for a given mode
- */
-export function getTelemetryEndpoint(
-  mode: "production" | "sandbox" | "stage" | "development" = "stage"
-): string {
-  const baseUrl = API_BASE_URL_BY_MODE[mode];
-  return `${baseUrl}${API_ENDPOINTS.TELEMETRY}`;
-}
 
 /**
  * Get the API base URL for a given mode

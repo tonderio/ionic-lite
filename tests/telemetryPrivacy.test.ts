@@ -64,14 +64,14 @@ describe("SDK telemetry carries no buyer data", () => {
         card: "sf-saved",
       } as any),
     ).rejects.toMatchObject({ statusCode: 500 });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await (checkout as any).telemetry.flush();
 
     const sent = mock.mock.calls.filter(([url]) => url === TELEMETRY);
     expect(sent.length).toBeGreaterThan(0);
     for (const [, init] of sent) {
       const event = JSON.parse(init.body);
       expect(keysDeep(event)).not.toEqual(
-        expect.arrayContaining([expect.stringMatching(/^(user_id|url|error|request|response|payment|stack)$/)]),
+        expect.arrayContaining([expect.stringMatching(/^(user_id|url|error|request|response|payment|stack|message|metadata)$/)]),
       );
       expect(init.body).not.toContain(EMAIL);
       expect(init.body).not.toContain("sf-saved");

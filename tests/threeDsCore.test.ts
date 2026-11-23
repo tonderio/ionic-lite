@@ -434,20 +434,19 @@ describe("verify3dsTransaction after the buyer returns", () => {
     }
   });
 
-  it("reports a failed verification of the iframe branch instead of leaving it unhandled", async () => {
+  it("does not leave a failed verification of the iframe branch unhandled", async () => {
     const failure = new Error("core unavailable");
     jest.spyOn(checkout.process3ds, "loadIframe").mockResolvedValue(true);
     jest.spyOn(checkout.process3ds, "verifyTransactionStatus").mockRejectedValue(failure);
-    const report = jest.spyOn(checkout as any, "reportSdkError").mockImplementation(() => {});
+    const unhandled = jest.fn();
+    process.on("unhandledRejection", unhandled);
     const payload = { next_action: { iframe_resources: { iframe: "<form></form>" } } };
 
     await checkout._handle3dsRedirect(payload as any);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(report).toHaveBeenCalledWith(
-      failure,
-      expect.objectContaining({ feature: "3ds-verification" }),
-    );
+    process.off("unhandledRejection", unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
   });
 
   it("still resumes a declined legacy payment through checkout-router", async () => {

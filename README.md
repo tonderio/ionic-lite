@@ -790,6 +790,14 @@ The calls around a payment follow the same business configuration as 6.5. Nothin
 - The payment methods and the vault token come from the payments API whatever the flag says, as the start-up configuration does.
 - **Secure token with the flag on:** your backend gets it from the payments API (`POST /transactions/v1/secure-token`, with your secret key and the customer) or, if it still calls the legacy `/api/secure-token/`, from that route, which hands over to the payments API for your business. Pass it to `configureCheckout()` as before. Do not turn `core_payments_enabled` on for a business whose app versions still run an older SDK with saved cards: the older SDK would send that token to the legacy card routes.
 
+### 6.7 Usage telemetry
+
+The SDK reports how it is used to Tonder (`POST <payments API base URL>/telemetry/v1/events`, authorized with `Authorization: Token <apiKey>`), so deprecated methods can be retired with data and a failing payment step is seen before merchants report it. Nothing changes in your integration.
+
+- **What it sends:** the SDK name (`ionic-lite`) and version, the environment, a random session id, the name of each public method called (deprecated methods are always reported), and for the payment steps (`start`, `customer`, `charge` and the final `payment` result) the outcome, duration, HTTP status, error code, payment method type (`CARD`), the operation id and the `X-Request-Id` the SDK sent to the payments API, which joins the event with the payments API's own trace. It also reports when a 3DS challenge is shown.
+- **What it never sends:** buyer data (name, email, phone, identification), card data, the customer id, the page URL, errors' messages or stacks, and payment requests or responses. The merchant is the one of the API key; it is not in the event body.
+- In `production` only a fraction of sessions report (deprecated method calls are always reported). Reporting never throws into your app and never delays a payment.
+
 ---
 
 ## 7. 3DS Handling
