@@ -111,7 +111,6 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
     } catch (error) {
       this.reportSdkError(error, {
         feature: "get-cards",
-        process_id: this.getCustomerId(),
         metadata: {
           step: "getCustomerCards"
         },
@@ -198,7 +197,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
       }
       this.reportSdkError(error, {
         feature: "save-card",
-        process_id: cardId || this.getCustomerId(),
+        process_id: cardId,
         metadata: {
           step: "saveCustomerCard",
         },
@@ -681,7 +680,7 @@ export class LiteCheckout extends BaseInlineCheckout implements ILiteCheckout{
             }
             this.reportSdkError(error, {
               feature: "payment",
-              process_id: cardId || this.getCustomerId(),
+              process_id: cardId,
               metadata: {
                 step: "card_on_file",
               },

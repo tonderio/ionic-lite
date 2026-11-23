@@ -93,19 +93,7 @@ export class SdkTelemetryClient {
   private buildEvent(error: unknown, context: ITelemetryContext): ITelemetryEvent {
     const errorInfo = this.extractErrorInfo(error);
 
-    // Build metadata from context.metadata and additional fields
-    const metadata: Record<string, any> = {
-      ...(context.metadata || {}),
-    };
-
-    if (metadata.error === undefined) {
-      metadata.error = error;
-    }
-
-    // Add url if available
-    if (typeof window !== "undefined") {
-      metadata.url = window.location.href;
-    }
+    const metadata: Record<string, any> = { ...(context.metadata || {}) };
 
     // Build the event payload matching the API format
     const event: ITelemetryEvent = {
@@ -123,8 +111,6 @@ export class SdkTelemetryClient {
     if (context.tenant_id) event.tenant_id = context.tenant_id;
     if (context.request_id) event.request_id = context.request_id;
     if (context.process_id) event.process_id = context.process_id;
-    if (context.user_id) event.user_id = context.user_id;
-    if (errorInfo.stack) event.stack = errorInfo.stack;
     if (context.error_code) event.error_code = context.error_code;
     if (context.http_status) event.http_status = context.http_status;
 

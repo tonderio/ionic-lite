@@ -139,37 +139,25 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
   }
 
   /**
-   * Get customer ID for telemetry (if available)
-   */
-  protected getCustomerId(): string | undefined {
-    return this.#customerData?.id?.toString();
-  }
-
-  /**
    * Report SDK errors to telemetry endpoint
    * NEVER throws - completely silent on failure
+   *
+   * Callers pass whatever they have at hand (requests, responses, the raw error); only the
+   * step and the core's error summary go out. Buyer data, the page URL and the customer id
+   * never leave the SDK.
    */
   protected reportSdkError(err: unknown, extra?: Record<string, any>): void {
     try {
-      const defaultUserId = this.getCustomerId();
-      const telemetryError =
-        err instanceof AppError && err.originalError !== undefined
-          ? err.originalError
-          : err;
-      const metadata = {
-        ...(extra?.metadata || {}),
-        ...(extra?.metadata?.error === undefined ? { error: telemetryError } : {}),
-      };
+      const { step, core_error } = extra?.metadata || {};
       const context: Record<string, any> = {
         tenant_id: this.merchantData?.business?.pk?.toString(),
-        user_id: defaultUserId,
-        ...(extra || {}),
-        metadata,
+        feature: extra?.feature || "unknown",
+        process_id: extra?.process_id,
+        error_code: extra?.error_code,
+        http_status: extra?.http_status,
+        metadata: { ...(step === undefined ? {} : { step }), ...(core_error === undefined ? {} : { core_error }) },
         request_id: this.requestId,
       };
-
-      if (!context.user_id) delete context.user_id;
-      context.feature = extra?.feature || "unknown";
 
       this.telemetry.captureException(err, context);
     } catch (e) {
