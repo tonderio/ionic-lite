@@ -58,7 +58,10 @@ export function buildCoreProcessBody(input: CoreCheckoutInput) {
     .filter(Boolean)
     .join(" ");
 
-  const paymentMethod = input.paymentMethodType
+  // The core's SPEI method is {type: "SPEI"} and nothing else: upper case, no apm_config.
+  const paymentMethod = input.paymentMethodType?.toUpperCase() === "SPEI"
+    ? { type: "SPEI" }
+    : input.paymentMethodType
     ? {
         type: input.paymentMethodType,
         ...(input.apmConfig && Object.keys(input.apmConfig).length > 0
@@ -162,9 +165,15 @@ function approvedBody(transaction: ICoreTransactionResponse, ctx: CoreResultCont
     provider: transaction.provider,
     next_action: transaction.next_action ?? {},
     psp_response: transaction.psp_response,
+    ...Object.fromEntries(
+      SPEI_TRANSACTION_FIELDS.filter((field) => transaction[field] != null).map((field) => [field, transaction[field]]),
+    ),
     actions: buildActions(transaction, ctx),
   };
 }
+
+// A SPEI payment's CLABE and bank travel at the top level of the body, as the legacy flow returns them.
+const SPEI_TRANSACTION_FIELDS = ["clabe", "bank_name"] as const;
 
 // What the core answers with the monolith's own names and values: a key it holds is copied
 // as given, a null included, because the monolith returns null there too.

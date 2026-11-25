@@ -46,4 +46,7 @@ export interface ICoreTransactionResponse {
     transaction_status?: string;
     psp_response?: Record<string, any>;
     payment_method_type?: string;
+    /** SPEI only: the CLABE the buyer transfers to and its bank, at the top level as the Direct API answers. */
+    clabe?: string;
+    bank_name?: string;
 }
