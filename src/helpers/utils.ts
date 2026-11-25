@@ -37,6 +37,7 @@ const CORE_APM_TYPES = [
   "NEOSURF",
   "QR",
   "TRANSFER",
+  "SPEI",
 ];
 
 export const isCoreApm = (paymentMethod?: string) =>

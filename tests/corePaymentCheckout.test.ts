@@ -490,7 +490,7 @@ describe("card payment with the flag ON", () => {
     const mock = installFetch({ flag: true });
     const { checkout } = buildCheckout();
 
-    await checkout.payment(paymentData({ card: undefined, payment_method: "spei" }));
+    await checkout.payment(paymentData({ card: undefined, payment_method: "wallet" }));
 
     expect(callsTo(mock, `${CORE}/transactions/v1/process`)).toHaveLength(0);
     expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(1);
@@ -808,3 +808,168 @@ describe("verify3dsTransaction of a core payment", () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toMatchObject({ engine: "core" });
   });
 });
+
+const SPEI_URL = "https://payflow.example.com/spei?token=display";
+const SPEI_PENDING = {
+  ...CORE_SUCCESS,
+  status: "Pending",
+  transaction_status: "Pending",
+  payment_method_type: "SPEI",
+  clabe: "646180000000000001",
+  bank_name: "STP",
+  next_action: {
+    redirect_to_url: {
+      url: SPEI_URL,
+      return_url: "https://shop.example.com/done",
+      verify_transaction_status_url: `/transactions/v1/${TRANSACTION_ID}`,
+    },
+  },
+};
+
+// The legacy router answers a SPEI payment in the same shape (Direct API): Pending, the payflow
+// link, and the CLABE and bank at the top level.
+const SPEI_LEGACY = {
+  status: "200",
+  message: "Success",
+  checkout_id: "legacy-chk",
+  transaction_status: "Pending",
+  transaction_id: 3,
+  payment_id: 12,
+  provider: "tonder",
+  clabe: "646180000000000001",
+  bank_name: "STP",
+  next_action: SPEI_PENDING.next_action,
+  psp_response: {},
+  actions: [],
+};
+
+describe("SPEI payment", () => {
+  const realLocation = Object.getOwnPropertyDescriptor(window, "location")!;
+  beforeEach(() => localStorage.clear());
+  afterEach(() => Object.defineProperty(window, "location", realLocation));
+
+  it("flag OFF keeps SPEI on the legacy flow and hands the merchant the router's body", async () => {
+    const mock = installFetch({ flag: false, router: { status: 201, body: SPEI_LEGACY } });
+    const { checkout } = buildCheckout();
+    stubLocation();
+
+    void checkout.payment(paymentData({ card: undefined, payment_method: "Spei" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(callsTo(mock, `${CORE}/transactions/v1/process`)).toHaveLength(0);
+    expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(1);
+    expect(window.location as unknown as string).toBe(SPEI_URL);
+  });
+
+  it.each(["SPEI", "spei", "Spei"])("flag ON sends SPEI written '%s' to the core as {type: 'SPEI'}", async (code) => {
+    const mock = installFetch({ flag: true, process: { status: 201, body: SPEI_PENDING } });
+    const { checkout } = buildCheckout();
+    stubLocation();
+
+    void checkout.payment(paymentData({ card: undefined, payment_method: code }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const [, init] = callsTo(mock, `${CORE}/transactions/v1/process`)[0];
+    expect(JSON.parse(init.body).payment_method).toEqual({ type: "SPEI" });
+    expect(callsTo(mock, `${LEGACY}/api/v1/orders/`)).toHaveLength(0);
+    expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(0);
+  });
+
+  it("never sends the merchant's apm_config for SPEI: the core's schema refuses extra fields", async () => {
+    const mock = installFetch({ flag: true, process: { status: 201, body: SPEI_PENDING } });
+    const { checkout } = buildCheckout();
+    stubLocation();
+
+    void checkout.payment(paymentData({ card: undefined, payment_method: "spei", apm_config: { any: "thing" } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const [, init] = callsTo(mock, `${CORE}/transactions/v1/process`)[0];
+    expect(JSON.parse(init.body).payment_method).toEqual({ type: "SPEI" });
+  });
+
+  it("flag ON redirects to the payflow page and stores the verify URL, as the legacy flow does", async () => {
+    installFetch({ flag: true, process: { status: 201, body: SPEI_PENDING } });
+    const { checkout } = buildCheckout();
+    stubLocation();
+
+    void checkout.payment(paymentData({ card: undefined, payment_method: "SPEI" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(window.location as unknown as string).toBe(SPEI_URL);
+    expect(JSON.parse(localStorage.getItem("verify_transaction_status_url")!)).toMatchObject({
+      url: `/transactions/v1/${TRANSACTION_ID}`,
+      engine: "core",
+    });
+  });
+
+  it.each([
+    ["flag ON", true, { status: 201, body: SPEI_PENDING }],
+    ["flag OFF", false, { status: 201, body: SPEI_LEGACY }],
+  ])("%s with the iframe presentation opens the page in the iframe, without resolving", async (_name, flag, answer) => {
+    installFetch({
+      flag,
+      process: answer as Reply,
+      router: answer as Reply,
+    });
+    const iframe = document.createElement("iframe");
+    iframe.id = "tdsIframe";
+    document.body.appendChild(iframe);
+    const checkout = new LiteCheckout({
+      mode: "stage",
+      apiKey: API_KEY,
+      returnUrl: "https://shop.example.com/done",
+      callBack: jest.fn(),
+      customization: { redirectOnComplete: false },
+    });
+    let resolved = false;
+
+    void checkout.payment(paymentData({ card: undefined, payment_method: "SPEI" })).then(() => (resolved = true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(iframe.getAttribute("src")).toBe(SPEI_URL);
+    expect(resolved).toBe(false);
+    document.body.innerHTML = "";
+  });
+
+  it("flag ON gives the merchant the legacy fields of a SPEI payment: clabe and bank_name included", async () => {
+    installFetch({ flag: true, process: { status: 201, body: SPEI_PENDING } });
+    const { checkout } = buildCheckout();
+    stubLocation();
+    let result: any;
+
+    void checkout.payment(paymentData({ card: undefined, payment_method: "SPEI" })).then((r) => (result = r));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The merchant's result is what the callback and the stored payload carry: read it from the 3DS handler.
+    result = (checkout as any).process3ds.payload;
+
+    expect(window.location as unknown as string).toBe(SPEI_URL);
+    expect(result).toMatchObject({
+      status: "200",
+      message: "Success",
+      transaction_status: "Pending",
+      payment_id: 55,
+      clabe: "646180000000000001",
+      bank_name: "STP",
+      next_action: SPEI_PENDING.next_action,
+    });
+  });
+
+  it("omits clabe and bank_name when the core does not answer them", async () => {
+    installFetch({ flag: true, process: { status: 201, body: { ...SPEI_PENDING, clabe: undefined, bank_name: undefined } } });
+    const { checkout } = buildCheckout();
+    stubLocation();
+
+    void checkout.payment(paymentData({ card: undefined, payment_method: "SPEI" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const payload = (checkout as any).process3ds.payload;
+    expect("clabe" in payload).toBe(false);
+    expect("bank_name" in payload).toBe(false);
+  });
+});
+
+function stubLocation(): { href: string } {
+  const stub = { href: "https://localhost/" };
+  Object.defineProperty(window, "location", { configurable: true, writable: true, value: stub });
+  return stub;
+}
