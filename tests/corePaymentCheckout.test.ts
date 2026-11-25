@@ -486,15 +486,138 @@ describe("card payment with the flag ON", () => {
     },
   );
 
-  it("keeps an alternative payment method on the legacy flow", async () => {
+  it("keeps an alternative payment method the core does not serve on the legacy flow", async () => {
     const mock = installFetch({ flag: true });
     const { checkout } = buildCheckout();
 
-    await checkout.payment(paymentData({ card: undefined, payment_method: "oxxopay" }));
+    await checkout.payment(paymentData({ card: undefined, payment_method: "spei" }));
 
     expect(callsTo(mock, `${CORE}/transactions/v1/process`)).toHaveLength(0);
     expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(1);
     expectLegacyOrderOfLegacyCustomer(mock);
+  });
+
+  it.each([
+    "oxxopay",
+    "MercadoPago",
+    "SAFETYPAYCASH",
+    "safetypayTransfer",
+    "neosurf",
+    "qr",
+    "Transfer",
+  ])("charges the APM %s through the core with its type as written", async (code) => {
+    const mock = installFetch({ flag: true });
+    const { checkout } = buildCheckout();
+
+    await checkout.payment(paymentData({ card: undefined, payment_method: code }));
+
+    const [, init] = callsTo(mock, `${CORE}/transactions/v1/process`)[0];
+    expect(init.headers).toMatchObject({
+      Authorization: `Token ${API_KEY}`,
+      "X-App-Origin": "sdk/ionic",
+    });
+    expect(JSON.parse(init.body)).toEqual({
+      operation_type: "payment",
+      amount: 100,
+      currency: "MXN",
+      client_reference: "TNDR-1",
+      customer: { name: "Ana Lopez", email: "ana@example.com", phone: "555" },
+      payment_method: { type: code },
+      metadata: { order_id: "o-1" },
+      return_url: "https://shop.example.com/done",
+      items: ITEMS,
+      browser_info: getBrowserInfo(),
+    });
+    expect(callsTo(mock, `${LEGACY}/api/v1/orders/`)).toHaveLength(0);
+    expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(0);
+  });
+
+  it.each(["card", "CARD"])("keeps a card whose request carries payment_method '%s' a card payment with its tokens", async (type) => {
+    const mock = installFetch({ flag: true });
+    const { checkout } = buildCheckout();
+    await checkout.injectCheckout();
+    const customer = { id: 1, auth_token: "core-cust-token" };
+
+    await checkout._handleCheckout({
+      card: { card_number: "tok-n", cvv: "tok-c", expiration_month: "tok-m", expiration_year: "tok-y", cardholder_name: "tok-h" },
+      payment_method: type,
+      customer,
+    });
+
+    const [, init] = callsTo(mock, `${CORE}/transactions/v1/process`)[0];
+    expect(JSON.parse(init.body).payment_method).toEqual({
+      type: "CARD",
+      card_number: "tok-n",
+      cvv: "tok-c",
+      expiration_month: "tok-m",
+      expiration_year: "tok-y",
+      cardholder_name: "tok-h",
+    });
+  });
+
+  it("does not trim the APM type: a padded code stays on the legacy flow", async () => {
+    const mock = installFetch({ flag: true });
+    const { checkout } = buildCheckout();
+
+    await checkout.payment(paymentData({ card: undefined, payment_method: " oxxopay " }));
+
+    expect(callsTo(mock, `${CORE}/transactions/v1/process`)).toHaveLength(0);
+    expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(1);
+  });
+
+  it("sends the merchant's apm_config beside the APM type", async () => {
+    const mock = installFetch({ flag: true });
+    const { checkout } = buildCheckout();
+    const apm_config = { preference: { back_urls: { success: "https://shop.example.com/ok" } } };
+
+    await checkout.payment(paymentData({ card: undefined, payment_method: "MercadoPago", apm_config }));
+
+    const [, init] = callsTo(mock, `${CORE}/transactions/v1/process`)[0];
+    expect(JSON.parse(init.body).payment_method).toEqual({ type: "MercadoPago", apm_config });
+  });
+
+  it("redirects the buyer to the APM page the core answers, as the legacy flow does", async () => {
+    installFetch({
+      flag: true,
+      process: {
+        status: 201,
+        body: {
+          ...CORE_SUCCESS,
+          status: "Pending",
+          transaction_status: "Pending",
+          payment_method_type: "OXXOPAY",
+          next_action: {
+            redirect_to_url: {
+              url: "https://payflow.example.com/oxxo-pay?token=display",
+              return_url: "https://shop.example.com/done",
+              verify_transaction_status_url: `/transactions/v1/${TRANSACTION_ID}`,
+            },
+          },
+        },
+      },
+    });
+    const { checkout } = buildCheckout();
+    const realLocation = Object.getOwnPropertyDescriptor(window, "location")!;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: { href: "https://localhost/" },
+    });
+
+    try {
+      void checkout.payment(paymentData({ card: undefined, payment_method: "oxxopay" }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(JSON.parse(localStorage.getItem("verify_transaction_status_url")!)).toMatchObject({
+        url: `/transactions/v1/${TRANSACTION_ID}`,
+        engine: "core",
+      });
+      expect((window.location as any).href ?? window.location).toBe(
+        "https://payflow.example.com/oxxo-pay?token=display",
+      );
+    } finally {
+      Object.defineProperty(window, "location", realLocation);
+    }
   });
 
   it("keeps the engine of a payment with the 3DS state it stores", async () => {
@@ -544,6 +667,16 @@ describe("card payment with the flag ON", () => {
 
 describe("card payment with the flag OFF", () => {
   beforeEach(() => localStorage.clear());
+
+  it("keeps an APM the core serves on the legacy flow", async () => {
+    const mock = installFetch({ flag: false });
+    const { checkout } = buildCheckout();
+
+    await checkout.payment(paymentData({ card: undefined, payment_method: "oxxopay" }));
+
+    expect(callsTo(mock, `${CORE}/transactions/v1/process`)).toHaveLength(0);
+    expect(callsTo(mock, `${LEGACY}/api/v1/checkout-router/`)).toHaveLength(1);
+  });
 
   it.each(["CARD", "card"])(
     "sends a '%s' payment method to checkout-router exactly as the merchant gave it",

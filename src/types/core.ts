@@ -45,4 +45,5 @@ export interface ICoreTransactionResponse {
     routing?: ICoreRouting;
     transaction_status?: string;
     psp_response?: Record<string, any>;
+    payment_method_type?: string;
 }

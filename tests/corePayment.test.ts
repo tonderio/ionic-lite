@@ -467,6 +467,14 @@ describe("rebuildVerifyTransaction", () => {
     });
   });
 
+  it("takes is_apm from the type the core answers: anything but CARD or APPLE_PAY is an APM", () => {
+    expect(rebuildVerifyTransaction({ ...CORE_GET, payment_method_type: "OXXOPAY" }).is_apm).toBe(true);
+    expect(rebuildVerifyTransaction({ ...CORE_GET, payment_method_type: "SomeNewApm" }).is_apm).toBe(true);
+    expect(rebuildVerifyTransaction({ ...CORE_GET, payment_method_type: "APPLE_PAY" }).is_apm).toBe(false);
+    expect(rebuildVerifyTransaction({ ...CORE_GET, payment_method_type: "CARD" }).is_apm).toBe(false);
+    expect(rebuildVerifyTransaction({ ...CORE_GET, payment_method_type: undefined }).is_apm).toBe(false);
+  });
+
   it("keeps the core status as both status and transaction_status for a Declined payment", () => {
     const result = rebuildVerifyTransaction({
       ...CORE_GET,

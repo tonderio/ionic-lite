@@ -101,6 +101,20 @@ describe("SDK telemetry with the shared client", () => {
     expect(events.find((e) => e.name === "flow.step" && e.step === "payment")).toMatchObject({ outcome: "ok" });
   });
 
+  it("reports the APM code of a core APM charge, not CARD", async () => {
+    const mock = installFetch();
+    const checkout = build();
+    await checkout.injectCheckout();
+
+    await checkout.payment({ ...PAYMENT, card: undefined, payment_method: "oxxopay" });
+    const { events } = await sentEvents(mock, checkout);
+
+    expect(events.find((e) => e.name === "flow.step" && e.step === "charge")).toMatchObject({
+      outcome: "ok",
+      payment_method_type: "OXXOPAY",
+    });
+  });
+
   it("sends exactly the start, customer, charge and result of a payment, with the method call", async () => {
     const mock = installFetch();
     const checkout = build();
