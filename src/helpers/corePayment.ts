@@ -1,4 +1,5 @@
 import { get } from "./get";
+import { isApmTypeAnswer } from "./utils";
 import { IItem } from "../types/checkout";
 import { ICoreTransactionResponse } from "../types/core";
 import { CoreVerifyTransaction } from "../types/transaction";
@@ -20,8 +21,11 @@ export type CoreCheckoutInput = {
   currency?: string;
   reference: string | number;
   customer: Record<string, any> | undefined;
-  /** The vault field tokens of a new card, or `{ skyflow_id }` for a saved one. */
-  card: Record<string, any>;
+  /** The vault field tokens of a new card, or `{ skyflow_id }` for a saved one; none for an APM. */
+  card?: Record<string, any>;
+  /** The APM code as the merchant wrote it; the payment is a card payment without it. */
+  paymentMethodType?: string;
+  apmConfig?: Record<string, any>;
   metadata?: Record<string, any>;
   returnUrl?: string;
   items?: IItem[];
@@ -54,14 +58,21 @@ export function buildCoreProcessBody(input: CoreCheckoutInput) {
     .filter(Boolean)
     .join(" ");
 
-  const paymentMethod = card.card_number
+  const paymentMethod = input.paymentMethodType
+    ? {
+        type: input.paymentMethodType,
+        ...(input.apmConfig && Object.keys(input.apmConfig).length > 0
+          ? { apm_config: input.apmConfig }
+          : {}),
+      }
+    : card!.card_number
     ? {
         type: "CARD",
-        ...Object.fromEntries(CARD_FIELDS.map((field) => [field, card[field]])),
+        ...Object.fromEntries(CARD_FIELDS.map((field) => [field, card![field]])),
         // Only the core's BIN lookup reads it; the field tokens carry the payment.
-        ...(card.skyflow_id ? { skyflow_id: card.skyflow_id } : {}),
+        ...(card!.skyflow_id ? { skyflow_id: card!.skyflow_id } : {}),
       }
-    : { type: "CARD", token: card.skyflow_id };
+    : { type: "CARD", token: card!.skyflow_id };
 
   return {
     operation_type: "payment",
@@ -177,7 +188,7 @@ const TRANSACTION_TYPES: Record<string, string> = { payment: "PAYMENT", refund: 
  * Rebuilds the transaction object the monolith's verify answered, from the core's
  * `GET /transactions/v1/{id}` answer. Only the fields the core holds are set, with the monolith's
  * names, types and values; fees, rates, guardian_*, wallet, card data and the like are absent,
- * never invented. `status` and `transaction_status` both hold the payment's own status; `is_apm` is false because only card payments go through the core.
+ * never invented. `status` and `transaction_status` both hold the payment's own status; `is_apm` is read from the method type the core answers.
  */
 export function rebuildVerifyTransaction(transaction: ICoreTransactionResponse): CoreVerifyTransaction {
   const routing = transaction.routing;
@@ -202,7 +213,7 @@ export function rebuildVerifyTransaction(transaction: ICoreTransactionResponse):
     status: transaction.status,
     transaction_status: transaction.status,
     provider: transaction.provider || "tonder",
-    is_apm: false,
+    is_apm: isApmTypeAnswer(transaction.payment_method_type),
     ...Object.fromEntries(Object.entries(optional).filter(([, value]) => value !== undefined)),
     ...Object.fromEntries(
       FIRST_PARTY_TRANSACTION_FIELDS.filter((field) => field in transaction).map((field) => [

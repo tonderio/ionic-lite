@@ -27,6 +27,25 @@ export const getBusinessId = (merchantData: any) => {
 export const isCardPaymentMethod = (paymentMethod?: string) =>
   !paymentMethod || paymentMethod.toLowerCase() === "card";
 
+// Mirrors APM_TYPES of usrv-transactions-core (src/domain/payment/Apms.ts): the APMs the core charges,
+// in any case and untrimmed; the code goes to the core as written.
+const CORE_APM_TYPES = [
+  "OXXOPAY",
+  "MERCADOPAGO",
+  "SAFETYPAYCASH",
+  "SAFETYPAYTRANSFER",
+  "NEOSURF",
+  "QR",
+  "TRANSFER",
+];
+
+export const isCoreApm = (paymentMethod?: string) =>
+  !!paymentMethod && CORE_APM_TYPES.includes(paymentMethod.toUpperCase());
+
+// What the core answers as a payment's method type: anything but a card or Apple Pay is an APM.
+export const isApmTypeAnswer = (type?: string) =>
+  !!type && !["CARD", "APPLE_PAY"].includes(type.toUpperCase());
+
 const clearSpace = (text: string) => {
   return text.trim().replace(/\s+/g, "");
 };

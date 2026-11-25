@@ -109,7 +109,7 @@ export interface CoreVerifyTransaction {
     status: string;
     transaction_status: string;
     provider: string;
-    is_apm: false;
+    is_apm: boolean;
     amount?: string | number | null;
     currency?: { code: string } | null;
     currency_code?: string | null;

@@ -11,7 +11,8 @@ import {
 import { getOpenpayDeviceSessionID } from "../data/openPayApi";
 import {
   getBrowserInfo,
-  isCardPaymentMethod
+  isCardPaymentMethod,
+  isCoreApm
 } from "../helpers/utils";
 import { validateSecureToken } from "../helpers/validations";
 import { registerOrFetchCustomer } from "../data/customerApi";
@@ -289,7 +290,7 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     if (this.merchantData?.core_payments_enabled === true && this.#isCorePayment(request)) {
       this.process3ds.setEngine("core");
       const requestId = newRequestId();
-      return this.trackStep("charge", { payment_method_type: "CARD", request_id: requestId }, (fields) =>
+      return this.trackStep("charge", { payment_method_type: paymentMethodType(request.payment_method), request_id: requestId }, (fields) =>
         this.#coreCheckout(request, requestId, fields),
       );
     }
@@ -314,14 +315,15 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
     return { ...request, customer };
   }
 
-  // Card payments only (new, saved and Card on File: the core decides the latter by itself);
-  // alternative methods stay on the legacy flow.
+  // Card payments (new, saved and Card on File: the core decides the latter by itself) and the
+  // APMs the core serves; any other alternative method stays on the legacy flow.
   #isCorePayment({ card, payment_method }: CheckoutRequest) {
-    return !!card && isCardPaymentMethod(payment_method);
+    return (!!card && isCardPaymentMethod(payment_method)) || isCoreApm(payment_method);
   }
 
   async #coreCheckout({
     card,
+    payment_method,
     returnUrl: returnUrlData
   }: CheckoutRequest, requestId: string, fields: StepFields) {
     const { reference } = this.merchantData!;
@@ -330,7 +332,9 @@ export class BaseInlineCheckout<T extends CustomizationOptions = CustomizationOp
       currency: this.currency,
       reference: this.order_reference ? this.order_reference : reference,
       customer: this.customer,
-      card: card!,
+      card,
+      paymentMethodType: isCoreApm(payment_method) ? payment_method : undefined,
+      apmConfig: this.#apm_config,
       metadata: this.metadata,
       returnUrl: returnUrlData || this.returnUrl,
       items: this.cartItems,
