@@ -218,7 +218,7 @@ export function rebuildVerifyTransaction(transaction: ICoreTransactionResponse):
     created: transaction.created_at,
     modified: transaction.updated_at,
   };
-  return {
+  const verified: CoreVerifyTransaction = {
     status: transaction.status,
     transaction_status: transaction.status,
     provider: transaction.provider || "tonder",
@@ -230,6 +230,35 @@ export function rebuildVerifyTransaction(transaction: ICoreTransactionResponse):
         (transaction as Record<string, any>)[field],
       ]),
     ),
+  };
+  if (!isSpeiAnswer(transaction)) return verified;
+  const spei = { ...verified, ...speiVerifyFields(transaction) };
+  // A date the core does not answer stays absent, as on every other rail.
+  if (transaction.operation_date === undefined) delete spei.operation_date;
+  return spei;
+}
+
+const isSpeiAnswer = (transaction: ICoreTransactionResponse) =>
+  transaction.payment_method_type?.toUpperCase() === "SPEI";
+
+// The deposits service answers a SPEI verification in its own shapes: the amount as a number, the
+// reference as text ("" when it has none) and the date as Python's UTC isoformat, with microseconds
+// only when they are not zero.
+const ISO_UTC = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(?:Z|[+-]00:?00)?$/;
+
+function toPythonIsoformat(value: string) {
+  const match = typeof value === "string" ? ISO_UTC.exec(value) : null;
+  if (!match) return value;
+  const micros = (match[2] || "").slice(0, 6).padEnd(6, "0");
+  return `${match[1]}${/^0+$/.test(micros) ? "" : `.${micros}`}+00:00`;
+}
+
+function speiVerifyFields(transaction: ICoreTransactionResponse) {
+  const { amount, operation_date } = transaction;
+  return {
+    ...(amount !== undefined && Number.isFinite(Number(amount)) ? { amount: Number(amount) } : {}),
+    transaction_reference: transaction.transaction_reference ?? "",
+    ...(operation_date === undefined ? {} : { operation_date: toPythonIsoformat(operation_date) }),
   };
 }
 

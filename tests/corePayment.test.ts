@@ -475,6 +475,53 @@ describe("rebuildVerifyTransaction", () => {
     expect(rebuildVerifyTransaction({ ...CORE_GET, payment_method_type: undefined }).is_apm).toBe(false);
   });
 
+  describe("of a SPEI payment", () => {
+    const spei = (overrides: Record<string, unknown> = {}) => ({
+      ...CORE_GET,
+      payment_method_type: "SPEI",
+      amount: "150.3700",
+      transaction_reference: "B1126031337626a",
+      operation_date: "2026-11-26T03:13:34.120Z",
+      ...overrides,
+    });
+
+    it("answers the amount as a number, as the deposits service does", () => {
+      expect(rebuildVerifyTransaction(spei()).amount).toBe(150.37);
+      expect(rebuildVerifyTransaction(spei({ amount: "100.0000" })).amount).toBe(100);
+    });
+
+    it("answers the deposit reference, and an empty text when the core has none", () => {
+      expect(rebuildVerifyTransaction(spei()).transaction_reference).toBe("B1126031337626a");
+      expect(rebuildVerifyTransaction(spei({ transaction_reference: null })).transaction_reference).toBe("");
+      expect(rebuildVerifyTransaction(spei({ transaction_reference: undefined })).transaction_reference).toBe("");
+    });
+
+    it.each([
+      ["2026-11-26T03:13:34.120Z", "2026-11-26T03:13:34.120000+00:00"],
+      ["2026-11-26T03:13:34.123456Z", "2026-11-26T03:13:34.123456+00:00"],
+      ["2026-11-26T03:13:34.000Z", "2026-11-26T03:13:34+00:00"],
+      ["2026-11-26T03:13:34Z", "2026-11-26T03:13:34+00:00"],
+    ])("writes the operation date %s as Python isoformat UTC", (input, expected) => {
+      expect(rebuildVerifyTransaction(spei({ operation_date: input })).operation_date).toBe(expected);
+    });
+
+    it("keeps a null operation date null and a missing one missing", () => {
+      expect(rebuildVerifyTransaction(spei({ operation_date: null }))).toHaveProperty("operation_date", null);
+      expect(rebuildVerifyTransaction(spei({ operation_date: undefined }))).not.toHaveProperty("operation_date");
+    });
+
+    it("matches the SPEI type in any case", () => {
+      expect(rebuildVerifyTransaction(spei({ payment_method_type: "spei" })).amount).toBe(150.37);
+    });
+
+    it("leaves the text amount, the reference and the date of a card and of another APM as they are", () => {
+      const fields = { amount: "150.3700", transaction_reference: null, operation_date: "2026-11-26T03:13:34.120Z" };
+
+      expect(rebuildVerifyTransaction({ ...CORE_GET, payment_method_type: "CARD", ...fields })).toMatchObject(fields);
+      expect(rebuildVerifyTransaction({ ...CORE_GET, payment_method_type: "OXXOPAY", ...fields })).toMatchObject(fields);
+    });
+  });
+
   it("keeps the core status as both status and transaction_status for a Declined payment", () => {
     const result = rebuildVerifyTransaction({
       ...CORE_GET,
